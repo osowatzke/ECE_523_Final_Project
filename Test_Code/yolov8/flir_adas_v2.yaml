@@ -5,10 +5,10 @@
 #  ADAS Dataset V2 dataset configuration
 #####################################################################
 
-path: ../../FLIR_ADAS_v2       # dataset root dir
-train: images_thermal_train # train images (relative to 'path')
-val: images_thermal_val     # val images (relative to 'path')
-test: images_thermal_test   # test images (relative to 'path'
+path: C:/Users/osowa/Documents/UA/ECE_523/Final_Project/run/datasets      # dataset root dir
+train: training # train images (relative to 'path')
+val: valid     # val images (relative to 'path')
+test: test   # test images (relative to 'path'
 
 # Classes
 names:
