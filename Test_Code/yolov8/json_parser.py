@@ -1,6 +1,7 @@
 import json
 import shutil
 import os
+from class_labels import CLASS_LABELS
 
 class JsonParser:
 
@@ -66,8 +67,8 @@ class JsonParser:
                     x = x/image_width
                     y = y/image_height
                     for label in annotation['labels']:
-                        if label in self.__LABELS.keys():
-                            id = self.__LABELS[label]
+                        if label in CLASS_LABELS.keys():
+                            id = CLASS_LABELS[label]
                             file.write(f'{id} {x:>.6f} {y:>.6f} {w:>.6f} {h:>.6f}\n')
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@
 
 from ultralytics import YOLO
 from json_parser import JsonParser
+from class_labels import CLASS_LABELS
 import os
 import shutil
 
@@ -33,10 +34,24 @@ def setup_dir(sub_dir, force=False):
         parser = JsonParser(in_json_file, label_dir)
         parser.run()
 
-force_flag = True
+force_flag = False
 setup_dir('images_thermal_train', force_flag)
 setup_dir('images_thermal_val', force_flag)
 setup_dir('video_thermal_test', force_flag)
+
+path_this_file = os.path.split(os.path.abspath(__file__))[0]
+run_dir = os.path.join(path_this_file,'..','..','run')
+dataset_dir = os.path.join(run_dir, 'datasets')
+yaml_path = os.path.join(run_dir, 'train.yaml')
+with open(yaml_path, "w") as file:
+    file.write(f'path: {os.path.abspath(dataset_dir)}\n')
+    file.write('train: train\n')
+    file.write('val: val\n')
+    file.write('test: test\n')
+    file.write('\n')
+    file.write('names:\n')
+    for (key, val) in zip(CLASS_LABELS.keys(), CLASS_LABELS.values()):
+        file.write(f'  {val}: {key}\n')
 
 # TRAINING ##########################################################
 
@@ -44,7 +59,7 @@ setup_dir('video_thermal_test', force_flag)
 model = YOLO('yolov8n.yaml')  # build a new model from YAML
 
 # Train the model
-results = model.train(data='flir_adas_v2.yaml', epochs=100, imgsz=640)
+results = model.train(data=yaml_path, epochs=100, imgsz=640)
 
 
 # VALIDATION #########################################################
