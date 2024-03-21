@@ -1,0 +1,30 @@
+#####################################################################
+# Authors: Nick Blanchard           | Owen Sowatzke
+#          nickyblanch@arizona.edu  |
+#
+#  ADAS Dataset V2 dataset configuration
+#####################################################################
+
+path: ../../FLIR_ADAS_v2       # dataset root dir
+train: images_thermal_train # train images (relative to 'path')
+val: images_thermal_val     # val images (relative to 'path')
+test: images_thermal_test   # test images (relative to 'path'
+
+# Classes
+names:
+  0: person
+  1: bike
+  2: car 
+  3: motor
+  4: bus
+  5: train
+  6: truck
+  7: light
+  8: hydrant 
+  9: sign
+  10: dog
+  11: deer
+  12: skateboard
+  13: stroller
+  14: scooter
+  15: other vehicle 
