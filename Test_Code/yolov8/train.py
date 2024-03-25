@@ -70,9 +70,6 @@ if TEST:
     imgs = glob.glob(os.path.join(path, "./run/datasets/test/images/*.jpg"))
     random_nums = []
     for i in range(0, 20):
-        random_nums.append(random.randint(1, len(imgs)))
-        test = model(imgs[random_nums[i]], show=True)  # predict on an image
-
-    # Test
-    # test = model('https://ultralytics.com/images/bus.jpg')  # predict on an image
+        # Test inference
+        test = model(imgs[random.randint(1, len(imgs))], show=True)  # predict on an image
 
