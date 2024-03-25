@@ -5,7 +5,7 @@
 #  ADAS Dataset V2 dataset configuration
 #####################################################################
 
-path: C:/Users/osowa/Documents/UA/ECE_523/Final_Project/run/datasets      # dataset root dir
+path: C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\run\datasets      # dataset root dir
 train: train # train images (relative to 'path')
 val: val     # val images (relative to 'path')
 test: test   # test images (relative to 'path'
