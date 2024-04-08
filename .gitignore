@@ -3,3 +3,4 @@ envs
 run
 runs
 yolov8n.pt
+Test_Code/yolov8/trained_model.pt
