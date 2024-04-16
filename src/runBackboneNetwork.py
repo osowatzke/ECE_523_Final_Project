@@ -3,7 +3,7 @@ from FlirDataset import FlirDataset
 from PathConstants import PathConstants
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-import numpy as np
+import loadTrainingData as LDT
 
 
 def run_network(backbone, im_data):
@@ -17,44 +17,23 @@ def run_network(backbone, im_data):
     return results
 
 
-def load_data(num_images):
-
-    # Load in test data
-    dataset = FlirDataset(PathConstants.TRAIN_DIR)
-    dataloader = DataLoader(dataset, batch_size=num_images)
-    
-    # Storing results
-    img_data_all = []
-    label_data_all = []
-
-    for i in range(num_images):
-        img, bboxes, labels = next(iter(dataloader))
-        img_data_all.append(img)
-        label_data_all.append(labels)
-
-    return img_data_all
-
-
 def display_results(results):
 
     nrows, ncols = (1, len(results))
     fig, axs = plt.subplots(nrows, ncols)
 
-    filters_data =[filters[0].detach().numpy() for filters in results]
+    filters_data =[filters[0][0, :, :].detach().numpy() for filters in results]
 
     for i in range(len(results)):
-        im = axs.imshow(filters_data[i])
+        im = axs[i].imshow(filters_data[i])
 
     plt.show()
 
 
-if __name__ == "__main__":
-
-    # Number of images
-    num_images = 1
+def load_data_and_run_backbone(num_images):
 
     # Load data
-    img_data = load_data(num_images)
+    img_data, bboxes_data, label_data = LDT.loadTrainingData(num_images, True)
 
     # Create backbone
     network = BackboneNetwork()
@@ -62,5 +41,13 @@ if __name__ == "__main__":
     # Run backbone network
     results = run_network(network, img_data)
 
-    # Display results
+    # Display results (DEBUG)
     display_results(results)
+
+    return results, bboxes_data, label_data
+
+
+if __name__ == "__main__":
+
+    load_data_and_run_backbone(10)
+   
