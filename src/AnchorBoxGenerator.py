@@ -32,7 +32,9 @@ class AnchorBoxGenerator:
         anchor_box_center_y = np.arange(height) + 0.5
         anchor_box_center_x = np.reshape(anchor_box_center_x, (1,-1,1,1))
         anchor_box_center_y = np.reshape(anchor_box_center_y, (-1,1,1,1))
-
+        anchor_box_center_x = np.repeat(anchor_box_center_x, anchor_box_center_y.shape[0], axis=0)
+        anchor_box_center_y = np.repeat(anchor_box_center_y, anchor_box_center_x.shape[1], axis=1)
+        
         # Compute the height and width of each anchor box
         h = scales*np.ones(ratios.shape)
         w = scales*ratios
@@ -69,7 +71,58 @@ class AnchorBoxGenerator:
         self.anchor_boxes_proj[:,0::2] = self.anchor_boxes_proj[:,0::2] * width_sf
         self.anchor_boxes_proj[:,1::2] = self.anchor_boxes_proj[:,1::2] * height_sf
 
+    def get_training_data(self, bounding_boxes_truth):
+
+        # Determine the IOU between the anchor boxes and true bounding boxes
+        iou = ops.box_iou(self.anchor_boxes_proj, bounding_boxes_truth)
+
+        # Determine which anchor boxes correspond to the maximum IOU
+        max_idx = torch.max(iou, dim=0)[1]
+        max_label = torch.zeros(iou.shape[0], dtype=torch.bool)
+        max_label[max_idx] = 1
+
+        # Determine which samples have true and false labels
+        true_label = torch.sum(iou > 0.7, dim=1) > 0
+        true_label = true_label | max_label
+        false_label = torch.sum(iou < 0.3, dim=1) == iou.shape[1]
+
+        # Get indices of true and false labels
+        idx = np.arange(iou.shape[0])
+        true_idx = idx[true_label]
+        false_idx = idx[false_label]
+
+        # Shuffle true and false indices
+        true_idx = true_idx[np.random.permutation(len(true_idx))]
+        false_idx = false_idx[np.random.permutation(len(false_idx))]
+
+        # Determine how many true and false samples to take
+        # Attempt to take 128 of each class
+        num_true_samples = min(len(true_idx),128)
+        num_false_samples = 256 - num_true_samples
+
+        # Select subset of true and false indices
+        true_idx = true_idx[0:num_true_samples]
+        false_idx = false_idx[0:num_false_samples]
+
+        # Determine which samples to select
+        selected_sample = torch.zeros(iou.shape[0], dtype=torch.bool)
+        selected_sample[true_idx] = 1
+        selected_sample[false_idx] = 1
+
+        # Select which anchor have labels
+        anchor_boxes_training = self.anchor_boxes.detach().clone()
+        anchor_boxes_training = anchor_boxes_training[selected_sample]
+
+        # Create array of labels for the training data
+        labels = torch.zeros(iou.shape[0])
+        labels[true_label] = 1
+        labels = labels[selected_sample]
+
+        # Return anchor boxes and labels for training
+        return(anchor_boxes_training, labels)
+
 if __name__ == "__main__":
-    anchor_box_generator = AnchorBoxGenerator(image_size=(32,32),feature_map_size=(8,8))
-    print(anchor_box_generator.anchor_boxes)
-    print(anchor_box_generator.anchor_boxes_proj)
+    anchor_box_generator = AnchorBoxGenerator(image_size=(600,600),feature_map_size=(16,20))
+    (anchor_boxes, labels) = anchor_box_generator.get_training_data(torch.Tensor([[0,0,4,4]]))
+    print(anchor_boxes.shape)
+    print(labels.shape)
