@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-7, momentum=0)
 
-    save_period = {'epoch' : 1, 'batch' : 1}
+    save_period = {'epoch' : 1, 'batch' : 100}
 
     train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
 
@@ -170,5 +170,5 @@ if __name__ == "__main__":
         device      = device
     )
 
-    net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run__2024-04-24_01-27-11','cp__2024-04-24_01-27-22.pth'))
+    # net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run__2024-04-24_01-27-11','cp__2024-04-24_01-27-22.pth'))
     net_trainer.train()
