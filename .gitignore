@@ -4,3 +4,5 @@ run
 runs
 yolov8n.pt
 Test_Code/yolov8/trained_model.pt
+Test_Code/RCNN/pytorch_implementation/run
+__pycache__
