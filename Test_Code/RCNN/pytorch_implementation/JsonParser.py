@@ -20,8 +20,8 @@ class JsonParser:
         w = float(bounding_box['w'])
         xmin = float(bounding_box['x'])
         ymin = float(bounding_box['y'])
-        xmax = xmin + w - 1
-        ymax = ymin + h - 1
+        xmax = xmin + w
+        ymax = ymin + h
         bbox = torch.Tensor([xmin, ymin, xmax, ymax])
         return bbox
     
@@ -68,8 +68,10 @@ class JsonParser:
         self.gt_boxes_all = []
         for frame in self.json_dict['frames']:
             self.read_frame(frame)
-        # self.gt_classes_all = pad_sequence(self.gt_classes_all, batch_first=True, padding_value=-1)
-        # self.gt_boxes_all = pad_sequence(self.gt_boxes_all, batch_first=True, padding_value=-1)
+        #self.gt_classes_all = pad_sequence(self.gt_classes_all, batch_first=True, padding_value=-1)
+        #self.gt_boxes_all = pad_sequence(self.gt_boxes_all, batch_first=True, padding_value=-1)
+        # print(self.gt_boxes_all.shape)
+        # print(self.gt_classes_all.shape)
 
 if __name__ == "__main__":
     in_path = os.path.join(PathConstants.TRAIN_DIR,'index.json')
