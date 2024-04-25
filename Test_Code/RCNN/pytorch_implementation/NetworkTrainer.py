@@ -137,8 +137,8 @@ class NetworkTrainer:
             self.batch = 0
             epoch_count += 1     
             self.epoch += 1
-            if (epoch_count == self.save['epoch']):
-                self.save()
+            if (epoch_count == self.save_period['epoch']):
+                self.save_state()
                 epoch_count = 0
                 
 if __name__ == "__main__":
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(ClassConstants.LABELS.keys()))
     model.to(device)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-7, momentum=0)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-6, momentum=0)
 
     save_period = {'epoch' : 1, 'batch' : 100}
 
