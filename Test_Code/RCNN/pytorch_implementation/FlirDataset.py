@@ -17,22 +17,22 @@ class FlirDataset(Dataset):
         self.device = device
         self.images = []
         num_images = len(self.json_parser.img_paths)
-        cached_images_path = os.path.join(PathConstants.SRC_DIR,'run')
-        cached_images_path = os.path.join(cached_images_path, 'training_images_cached.hdf')
-        if os.path.exists(cached_images_path):
-            print('Loading Cached Training Image Data')
-            with h5py.File(cached_images_path, 'r') as hf:
-                self.images = hf['images'][:]
-        else:
-            print('Loading Images. Please be Patient...')
-            for idx, img_path in enumerate(self.json_parser.img_paths):
-                if idx % 100 == 0:
-                    print('%.2f%% Complete' % (100 * idx/num_images))
-                img = cv2.imread(os.path.join(self.data_dir, img_path))
-                self.images.append(img)
-            self.images = np.array(self.images)
-            with h5py.File(cached_images_path, 'w') as hf:
-                hf.create_dataset('images', data=self.images)
+        # cached_images_path = os.path.join(PathConstants.SRC_DIR,'run')
+        # cached_images_path = os.path.join(cached_images_path, 'training_images_cached.hdf')
+        # if os.path.exists(cached_images_path):
+        #     print('Loading Cached Training Image Data')
+        #     with h5py.File(cached_images_path, 'r') as hf:
+        #         self.images = hf['images'][:]
+        #else:
+        print('Loading Images. Please be Patient...')
+        for idx, img_path in enumerate(self.json_parser.img_paths):
+            if idx % 100 == 0:
+                print('%.2f%% Complete' % (100 * idx/num_images))
+            img = cv2.imread(os.path.join(self.data_dir, img_path))
+            self.images.append(img)
+        # self.images = np.array(self.images)
+        # with h5py.File(cached_images_path, 'w') as hf:
+        #    hf.create_dataset('images', data=self.images)
 
     def __len__(self):
         return len(self.json_parser.img_paths)
