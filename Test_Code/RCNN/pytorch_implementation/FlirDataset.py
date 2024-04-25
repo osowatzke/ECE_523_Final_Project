@@ -14,28 +14,27 @@ class FlirDataset(Dataset):
         self.json_parser = JsonParser(file_name)
         self.data_dir = os.path.join(dir,'data')
         self.device = device
-        self.reset_len()
-
-    def reset_len(self):
-        self.len = len(self.json_parser.img_paths)
+        self.images = []
+        for img_path in self.json_parser.img_paths:
+            img = cv2.imread(img_path)
+            img = torch.from_numpy(img).permute(2, 0, 1)
+            img = img.to(dtype=torch.float32)
+            self.images.append(self.images)
 
     def __len__(self):
-        return self.len
+        return len(self.json_parser.img_paths)
     
     def __getitem__(self, idx):
         img_path = self.json_parser.img_paths[idx]
         img_path = os.path.join(self.data_dir, img_path)
         gt_boxes = self.json_parser.gt_boxes_all[idx]
         gt_classes = self.json_parser.gt_classes_all[idx]
+        img = self.images[idx]
         if self.device is not None:
             gt_boxes = gt_boxes.to(self.device)
             gt_classes = gt_classes.to(self.device)
-        targets = {'boxes': gt_boxes, 'labels': gt_classes}
-        img = cv2.imread(img_path)
-        img = torch.from_numpy(img).permute(2, 0, 1)
-        img = img.to(dtype=torch.float32)
-        if self.device is not None:
             img = img.to(self.device)
+        targets = {'boxes': gt_boxes, 'labels': gt_classes}
         return img, targets, idx
     
 if __name__ == "__main__":
