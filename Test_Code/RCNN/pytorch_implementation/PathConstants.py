@@ -1,5 +1,4 @@
 import os
-from Singleton import Singleton
 
 class PathConstants():
     _instance = None

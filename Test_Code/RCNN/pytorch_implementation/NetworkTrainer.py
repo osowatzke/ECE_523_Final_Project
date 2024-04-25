@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-l','--make_local_copy')
+    parser.add_argument('-l','--make_local_copy', action='store_true')
     args = parser.parse_args()
     PathConstants = PathConstants()
     if args.make_local_copy:
