@@ -116,6 +116,7 @@ class NetworkTrainer:
             np.random.seed(0)
             random.seed(0)
             for img, targets in data_loader:
+                print(img[0].shape)
                 if load_rng_state:
                     self.load_rng_state()
                     load_rng_state = False
@@ -141,6 +142,14 @@ class NetworkTrainer:
                 epoch_count = 0
                 
 if __name__ == "__main__":
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l','--make_local_copy')
+    args = parser.parse_args()
+    PathConstants = PathConstants()
+    if args.make_local_copy:
+        PathConstants.source_from_local_copy()
 
     torch.manual_seed(0)
     np.random.seed(0)
