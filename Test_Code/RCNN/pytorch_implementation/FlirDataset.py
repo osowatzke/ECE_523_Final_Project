@@ -21,7 +21,7 @@ class FlirDataset(Dataset):
             if idx % 100 == 0:
                 print('%.2f%% Complete' % (100 * idx/num_images))
             img = cv2.imread(os.path.join(self.data_dir, img_path))
-            self.images.append(self.images)
+            self.images.append(img)
 
     def __len__(self):
         return len(self.json_parser.img_paths)
