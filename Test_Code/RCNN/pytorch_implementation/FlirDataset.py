@@ -16,7 +16,7 @@ class FlirDataset(Dataset):
         self.device = device
         self.images = []
         for img_path in self.json_parser.img_paths:
-            img = cv2.imread(os.path.join(dir, img_path))
+            img = cv2.imread(os.path.join(self.data_dir, img_path))
             img = torch.from_numpy(img).permute(2, 0, 1)
             img = img.to(dtype=torch.float32)
             self.images.append(self.images)
