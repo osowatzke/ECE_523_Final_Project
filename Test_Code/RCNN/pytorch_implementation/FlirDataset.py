@@ -15,10 +15,12 @@ class FlirDataset(Dataset):
         self.data_dir = os.path.join(dir,'data')
         self.device = device
         self.images = []
-        for img_path in self.json_parser.img_paths:
+        num_images = len(self.json_parser.img_paths)
+        print('Loading Images. Please be Patient...')
+        for idx, img_path in enumerate(self.json_parser.img_paths):
+            if idx % 100 == 0:
+                print('%.2f%% Complete' % (100 * idx/num_images))
             img = cv2.imread(os.path.join(self.data_dir, img_path))
-            img = torch.from_numpy(img).permute(2, 0, 1)
-            img = img.to(dtype=torch.float32)
             self.images.append(self.images)
 
     def __len__(self):
@@ -30,6 +32,8 @@ class FlirDataset(Dataset):
         gt_boxes = self.json_parser.gt_boxes_all[idx]
         gt_classes = self.json_parser.gt_classes_all[idx]
         img = self.images[idx]
+        img = torch.from_numpy(img).permute(2, 0, 1)
+        img = img.to(dtype=torch.float32)
         if self.device is not None:
             gt_boxes = gt_boxes.to(self.device)
             gt_classes = gt_classes.to(self.device)
