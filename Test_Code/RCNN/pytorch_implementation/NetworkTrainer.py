@@ -99,7 +99,7 @@ class NetworkTrainer:
         self.run_dir = os.path.join(class_path,'run',f"run__{current_time}")
         
     def train(self):
-        num_batches = math.ceil(self.data.len/self.batch_size)
+        num_batches = math.ceil(len(self.data)/self.batch_size)
         sampler = CustomSampler(None)
         data_loader = DataLoader(self.data, batch_size=self.batch_size, collate_fn=collate_fn, shuffle=False, generator=None, sampler=sampler)
         self.model.train()
