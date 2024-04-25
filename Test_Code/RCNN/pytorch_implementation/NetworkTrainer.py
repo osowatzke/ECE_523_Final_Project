@@ -165,7 +165,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 1,
-        batch_size  = 1,
+        batch_size  = 16,
         save_period = save_period,
         device      = device
     )
