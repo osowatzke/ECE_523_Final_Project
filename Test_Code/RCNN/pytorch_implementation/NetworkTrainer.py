@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : 1}
+    save_period = {'epoch' : 1, 'batch' : 100}
 
     # Create dataset object
     train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
