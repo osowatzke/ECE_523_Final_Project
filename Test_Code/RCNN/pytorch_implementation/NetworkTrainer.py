@@ -167,8 +167,6 @@ class NetworkTrainer:
         # Save the initial random generator state
         self.get_init_rng_state()
 
-        print(torch.get_rng_state()[:10])
-
         # Determine the number of batches
         num_batches = math.ceil(len(self.data)/self.batch_size)
 
@@ -177,8 +175,6 @@ class NetworkTrainer:
 
         # Create data loader object
         data_loader = DataLoader(self.data, batch_size=self.batch_size, collate_fn=collate_fn, shuffle=False, sampler=sampler)
-        
-        print(torch.get_rng_state()[:10])
 
         # Put the model in training model
         self.model.train()
@@ -220,8 +216,6 @@ class NetworkTrainer:
             # Save the random generator state at the start of the epoch
             self.get_epoch_rng_state()
 
-            print(torch.get_rng_state()[:10])
-
             # Loop for each batch
             for img, targets in data_loader:
                 
@@ -229,8 +223,6 @@ class NetworkTrainer:
                 if load_rng_state:
                     self.load_rng_state()
                     load_rng_state = False
-
-                print(torch.get_rng_state()[:10])
 
                 # Set the gradient to zero
                 self.optimizer.zero_grad()
