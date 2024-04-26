@@ -317,7 +317,7 @@ if __name__ == "__main__":
     )
 
     # Uncomment and adjust path to resume training
-    net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run','run__2024-04-25_20-19-58','cp__2024-04-25_20-20-02.pth'))
+    # net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run','run__2024-04-25_20-19-58','cp__2024-04-25_20-20-02.pth'))
     
     # Train model
     net_trainer.train()
