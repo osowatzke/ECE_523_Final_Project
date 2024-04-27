@@ -1,5 +1,6 @@
 from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torch.utils.tensorboard import SummaryWriter
 from ClassConstants import ClassConstants
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import Sampler
@@ -164,6 +165,9 @@ class NetworkTrainer:
     # Function defines the training loop
     def train(self):
 
+        # Create TensorBoard SummaryWriter instance
+        writer = SummaryWriter()
+
         # Save the initial random generator state
         self.get_init_rng_state()
 
@@ -218,7 +222,7 @@ class NetworkTrainer:
 
             # Loop for each batch
             for img, targets in data_loader:
-                
+
                 # Load the random number generator state if resuming training mid epoch
                 if load_rng_state:
                     self.load_rng_state()
@@ -238,6 +242,9 @@ class NetworkTrainer:
                 # Increment the batch counters
                 self.batch += 1
                 batch_count += 1
+
+                # Log the loss to TensorBoard
+                writer.add_scalar('Loss/train', losses.item(), self.batch/num_batches + self.epoch)
 
                 # Print the batch loss
                 print(f'Batch Loss ({self.batch}/{num_batches}): {losses.item()}')
@@ -265,6 +272,10 @@ class NetworkTrainer:
             if (epoch_count == self.save_period['epoch']):
                 self.save_state()
                 epoch_count = 0
+
+        # Clear any pending events
+        writer.flush()
+        writer.close()
       
 # Code to run if file is called directly
 if __name__ == "__main__":
@@ -300,7 +311,7 @@ if __name__ == "__main__":
 
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : -1}
+    save_period = {'epoch' : -1, 'batch' : -1}
 
     # Create dataset object
     train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=4, device=device)
