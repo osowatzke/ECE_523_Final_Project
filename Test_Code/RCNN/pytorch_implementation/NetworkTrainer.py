@@ -300,18 +300,18 @@ if __name__ == "__main__":
 
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : 100}
+    save_period = {'epoch' : 1, 'batch' : -1}
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=4, device=device)
 
     # Create network trainer
     net_trainer = NetworkTrainer(
         data        = train_data, 
         model       = model,
         optimizer   = optimizer,
-        num_epochs  = 1,
-        batch_size  = 1,
+        num_epochs  = 50,
+        batch_size  = 16,
         save_period = save_period,
         device      = device
     )

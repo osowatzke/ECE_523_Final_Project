@@ -1,5 +1,5 @@
 from JsonParser import JsonParser
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from PathConstants import PathConstants
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -7,35 +7,37 @@ import numpy as np
 import torch
 import os
 import cv2
-import h5py
 
 class FlirDataset(Dataset):
-    def __init__(self, dir, device=None):
+    def __init__(self, dir, downsample=1, num_images=-1, device=None):
         file_name = os.path.join(dir,'index.json')
         self.json_parser = JsonParser(file_name)
         self.data_dir = os.path.join(dir,'data')
         self.device = device
         self.images = []
-        num_images = len(self.json_parser.img_paths)
-        # cached_images_path = os.path.join(PathConstants.SRC_DIR,'run')
-        # cached_images_path = os.path.join(cached_images_path, 'training_images_cached.hdf')
-        # if os.path.exists(cached_images_path):
-        #     print('Loading Cached Training Image Data')
-        #     with h5py.File(cached_images_path, 'r') as hf:
-        #         self.images = hf['images'][:]
-        #else:
+        if num_images == -1:
+            num_images = len(self.json_parser.img_paths)
         print('Loading Images. Please be Patient...')
-        for idx, img_path in enumerate(self.json_parser.img_paths):
-            if idx % 100 == 0:
-                print('%.2f%% Complete' % (100 * idx/num_images))
+        for img_idx, img_path in enumerate(self.json_parser.img_paths[:num_images]):
+            if img_idx % 100 == 0:
+                print('%.2f%% Complete' % (100 * img_idx/num_images))
             img = cv2.imread(os.path.join(self.data_dir, img_path))
+            if downsample != 1:
+                (height, width, _) = img.shape
+                dim = (width//downsample, height//downsample)
+                img = cv2.resize(img, dim, interpolation=cv2.INTER_AREA)
+                boxes = self.json_parser.gt_boxes_all[img_idx]
+                for box_idx in range(len(boxes)):
+                    xmin = boxes[box_idx][0]//downsample
+                    ymin = boxes[box_idx][1]//downsample
+                    xmax = (boxes[box_idx][2] + downsample - 1)//downsample
+                    ymax = (boxes[box_idx][3] + downsample - 1)//downsample
+                    boxes[box_idx] = torch.Tensor([xmin, ymin, xmax, ymax])
+                self.json_parser.gt_boxes_all[img_idx] = boxes
             self.images.append(img)
-        # self.images = np.array(self.images)
-        # with h5py.File(cached_images_path, 'w') as hf:
-        #    hf.create_dataset('images', data=self.images)
 
     def __len__(self):
-        return len(self.json_parser.img_paths)
+        return len(self.images)
     
     def __getitem__(self, idx):
         img_path = self.json_parser.img_paths[idx]
@@ -53,22 +55,16 @@ class FlirDataset(Dataset):
         return img, targets, idx
     
 if __name__ == "__main__":
-    dataset = FlirDataset(PathConstants.TRAIN_DIR)
-    dataloader = DataLoader(dataset, batch_size=64)
-    for img, target in dataloader:
-        print(target)
-        break
-    for img_batch, gt_bboxes_batch, gt_classes_batch in dataloader:
-        img_data_all = img_batch
-        gt_bboxes_all = gt_bboxes_batch
-        gt_classes_all = gt_classes_batch
-        break
-    img_data_all = img_data_all[0]
-    gt_bboxes_all = gt_bboxes_all[0]
-    gt_classes_all = gt_classes_all[0]
-    img_data_all = np.uint8(img_data_all.permute(1, 2, 0).numpy())
+    PathConstants()
+    dataset = FlirDataset(PathConstants.TRAIN_DIR, downsample=4, num_images=1)
+    img = dataset[0][0]
+    targets = dataset[0][1]
+    boxes = targets['boxes']
+    labels = targets['labels']
+    img_data_all = np.uint8(img.permute(1, 2, 0).numpy())
     plt.imshow(img_data_all)
-    for gt_box in gt_bboxes_all:
+    print(boxes.shape)
+    for gt_box in boxes:
         x = gt_box[0]
         y = gt_box[1]
         w = gt_box[2] - x
