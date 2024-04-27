@@ -246,7 +246,7 @@ class NetworkTrainer:
 
                 # Log the loss to TensorBoard
                 writer.add_scalar('Loss/train', losses.item(), self.batch/num_batches + self.epoch)
-                # writer.flush()
+                writer.flush()
 
                 # Print the batch loss
                 print(f'Batch Loss ({self.batch}/{num_batches}): {losses.item()}')
