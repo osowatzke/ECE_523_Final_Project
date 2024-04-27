@@ -245,6 +245,7 @@ class NetworkTrainer:
 
                 # Log the loss to TensorBoard
                 writer.add_scalar('Loss/train', losses.item(), self.batch/num_batches + self.epoch)
+                writer.flush()
 
                 # Print the batch loss
                 print(f'Batch Loss ({self.batch}/{num_batches}): {losses.item()}')
@@ -274,7 +275,7 @@ class NetworkTrainer:
                 epoch_count = 0
 
         # Clear any pending events
-        writer.flush()
+        # writer.flush()
         writer.close()
       
 # Code to run if file is called directly
