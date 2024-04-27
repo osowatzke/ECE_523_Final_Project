@@ -316,7 +316,7 @@ if __name__ == "__main__":
     save_period = {'epoch' : -1, 'batch' : -1}
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=4, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=4, num_images=100, device=device)
 
     # Create network trainer
     net_trainer = NetworkTrainer(
