@@ -12,6 +12,7 @@ import torch
 import random
 import math
 import os
+import re
 
 def collate_fn(data):
     """
@@ -113,9 +114,7 @@ class NetworkTrainer:
         self.get_rng_state()
 
         # Determine what to name the checkpoint file
-        current_time = datetime.now()
-        current_time = current_time.strftime("%Y-%m-%d_%H-%M-%S")
-        checkpoint_file = f"cp__{current_time}.pth"
+        checkpoint_file = f"cp__epoch_{self.epoch}_batch_{self.batch}.pth"
         checkpoint_file = os.path.join(self.run_dir, checkpoint_file)
 
         # Save the checkpoint file
@@ -129,7 +128,24 @@ class NetworkTrainer:
             'sampler_indices' : self.sampler_indices,
             'rng_state'       : self.rng_state,
             'init_rng_state'  : self.init_rng_state}, checkpoint_file)
-    
+        
+        # Get a list of all files in the run directory
+        files = os.listdir(self.run_dir)
+
+        # Determine which files are checkpoint files
+        r = re.compile('cp.*\\.pth')
+        files = list(filter(r.match, files))
+
+        # Delete all the old checkpoint files
+        checkpoint_file = os.path.basename(checkpoint_file)
+        for file in files:
+            if file != checkpoint_file:
+                try:
+                    file = os.path.join(self.run_dir,file)
+                    os.remove(file)
+                except:
+                    print("Failed to remove checkpoint file %s" % (file))
+
     # Function loads the training state
     def load_state(self, checkpoint):
 
@@ -184,21 +200,39 @@ class NetworkTrainer:
         # Put the model in training model
         self.model.train()
 
-        # Initialize counter for the number of epochs
+        # Specify whether random number generator state must
+        # be set before first epoch
+        set_epoch_rng_state = self.epoch_rng_state is not None
+
+        # Initialize counters for the number of batches and the number of epochs 
+        batch_count = 0
         epoch_count = 0
 
-        # Loop for each epoch
-        while (self.epoch < self.num_epochs):
-            
-            # First time through the training loop
-            if epoch_count == 0:
+        # Determine initial epoch
+        init_epoch = self.epoch
 
-                # Load the state of the random number generator if one exist
-                if self.epoch_rng_state is not None:
-                    self.load_epoch_rng_state()
+        # Loop for each epoch
+        for self.epoch in range(init_epoch, self.num_epochs):
 
             # Print the current epoch number
             print(f'Beginning epoch {self.epoch+1}/{self.num_epochs}:')
+
+            # Set random number generator state for first epoch
+            if set_epoch_rng_state:
+                set_epoch_rng_state = False
+                self.load_epoch_rng_state()
+
+            # Saving state from last batch or last epoch
+            if ((epoch_count == self.save_period['epoch']) or
+                ((batch_count > 0) and (self.save_period['batch'] >= 0))):
+                self.save_state()
+
+            # Reset epoch counter after saving epoch data
+            if (epoch_count == self.save_period['epoch']):
+                epoch_count = 0
+            
+            # Reset batch counter
+            batch_count = 0
 
             # Assume the batch random number generator state needs to be loaded
             load_rng_state = True
@@ -215,9 +249,6 @@ class NetworkTrainer:
             # Set the indices for the custom sampler
             sampler.indices = self.sampler_indices[self.batch * self.batch_size::]
 
-            # Initialize the batch count
-            batch_count = 0
-
             # Save the random generator state at the start of the epoch
             self.get_epoch_rng_state()
 
@@ -229,10 +260,15 @@ class NetworkTrainer:
                     self.load_rng_state()
                     load_rng_state = False
 
+                # Save training state from end of last batch
+                if (batch_count == self.save_period['batch']):
+                    self.save_state()
+                    batch_count = 0
+
                 # Set the gradient to zero
                 self.optimizer.zero_grad()
 
-                # COmpute the total loss
+                # Compute the total loss
                 loss_dict = self.model(img, targets)
                 losses = sum(loss for loss in loss_dict.values())
 
@@ -240,40 +276,28 @@ class NetworkTrainer:
                 losses.backward()
                 self.optimizer.step()
 
-                # Increment the batch counters
-                self.batch += 1
-                batch_count += 1
-
                 # Log the loss to TensorBoard
                 writer.add_scalar('Loss/train', losses.item(), self.batch + self.epoch*num_batches)
                 writer.flush()
 
                 # Print the batch loss
-                print(f'Batch Loss ({self.batch}/{num_batches}): {losses.item()}')
+                print(f'Batch Loss ({self.batch+1}/{num_batches}): {losses.item()}')
 
                 # Append to array of losses
                 self.loss.append(losses.item())
 
-                # Leave training loop once epoch is complete
-                if (self.batch == num_batches):
-                    break
+                # Increment the batch counters
+                self.batch += 1
+                batch_count += 1
 
-                # Save training state at end of batch
-                elif (batch_count == self.save_period['batch']):
-                    self.save_state()
-                    batch_count = 0
-
-            # Resent the batch counter
+            # Reset the batch number
             self.batch = 0
 
-            # Increment the epoch counters
-            epoch_count += 1     
-            self.epoch += 1
+            # Increment the epoch counter
+            epoch_count += 1
 
-            # Save state at end of epoch
-            if (epoch_count == self.save_period['epoch']):
-                self.save_state()
-                epoch_count = 0
+        # Save data from the end of the final epoch
+        self.save_state()
 
         # Clear any pending events
         writer.flush()
