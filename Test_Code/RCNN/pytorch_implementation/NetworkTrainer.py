@@ -324,7 +324,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 128,
+        batch_size  = 64,
         save_period = save_period,
         device      = device
     )
