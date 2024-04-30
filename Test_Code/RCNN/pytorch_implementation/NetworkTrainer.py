@@ -333,7 +333,7 @@ if __name__ == "__main__":
     model.to(device)
 
     # Create optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-6, momentum=0)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005)
 
     # Set the period for saving data
     # -1 will cause data not to be saved
@@ -348,7 +348,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 16,
+        batch_size  = 32,
         save_period = save_period,
         device      = device
     )
