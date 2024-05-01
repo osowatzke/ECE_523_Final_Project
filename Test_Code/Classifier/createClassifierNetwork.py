@@ -101,35 +101,62 @@ class classifierNet(nn.Module):
         # Specify optimizer
         optimizer = torch.optim.SGD(self.parameters(), lr=0.001, momentum=0.9)
 
-        # Train on data
+        # For each batch
         for i, data in enumerate(self.training_loader):
            
             # Load data
             inputs, labels = data
 
-            # Reformat labels
-            labels_ = np.empty((12, len(self.labels)))
+            # Number of ROIs
             j = 0
+            numROIs = 0
+            for j in range(len(labels)):
+                numROIs = numROIs + len(labels[j]["labels"])
+
+            # Hold all data
+            labels_ = np.empty((numROIs, len(self.labels)))
+            imgs_ = torch.zeros([numROIs, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS], dtype=torch.int32)
+            boxes_ = torch.zeros([numROIs, 4], dtype=torch.int32)
+
+            # For each image
+            k = 0
             for label in labels:
-                class_ = label["labels"][0]
-                vec_ = torch.zeros(len(self.labels))
-                vec_[int(class_)] = torch.tensor(1.0)
-                labels_[j,:] = vec_
-                j = j + 1
+            
+                # For each ROI in image
+                j = 0
+                for j in range(len(label["labels"])):
+                    class_ = label["labels"][j]
+                    vec_ = torch.zeros(len(self.labels))
+                    vec_[int(class_)] = torch.tensor(1.0)
+                    labels_[k+j,:] = vec_
+                    boxes_[k+j, :] = label["boxes"][j]
+                    j = j + 1
+                k = k + 1
 
             # Run data through backbone
             if backbone:
                 imgs = torch.stack((*inputs,))
                 features = torch.tensor(backbone(imgs))
 
-            # Re-format to make it compatible with FCL dimensions
-            features = torch.flatten(features, start_dim = 1)
+            # Crop output for each region
+            #TODO: Need to figure out which image each ROI should be pulled from.
+            j = 0
+            for j in range(numROIs):
+                x1 = int(boxes_[j, 0] / 32)
+                x2 = int(boxes_[j, 1] / 32)
+                y1 = int(boxes_[j, 2] / 32)
+                y2 = int(boxes_[j, 3] / 32)
+                img_ = features[j,x1:x2,y1:y2,:]
+                imgs_[j,:,:,:] = F.interpolate(img_, size=(7, 7, IMG_CHANNELS))
+
+            # Re-format output to make it compatible with FCL dimensions
+            features = torch.flatten(imgs_, start_dim = 1)
 
             # Zero gradients before each batch
             optimizer.zero_grad()
 
             # Run batch through network
-            outputs = self(features)
+            outputs = self(imgs_)
 
             # Calculate loss and gradients
             loss = self.loss_function(outputs, torch.tensor(labels_).float())
