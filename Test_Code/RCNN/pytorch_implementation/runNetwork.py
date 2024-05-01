@@ -25,7 +25,7 @@ train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=100, 
 
 # Load pretrained weights
 file_path = os.path.dirname(__file__)
-weights_path = os.path.join(file_path,'weights','cp__epoch_3_batch_0.pth')
+weights_path = os.path.join(file_path,'weights','cp__epoch_5_batch_0.pth')
 state_dict = torch.load(weights_path,map_location=device)
 model.load_state_dict(state_dict['model_state'])
 
@@ -34,7 +34,7 @@ model.eval()
 #print(type(train_data[0][0]))
 #test_data = train_data[0][0].reshape((1,) + train_data[0][0].shape)
 #print(test_data.shape)
-img = train_data[2][0]
+img = train_data[1][0]
 pred = model([img])
 img = img[0,:,:].detach().numpy()
 #print(test_data[0,:,:].shape)

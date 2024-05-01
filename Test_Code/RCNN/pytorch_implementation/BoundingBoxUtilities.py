@@ -39,11 +39,15 @@ def corners_to_centroid(bboxes, anchor_boxes):
     th = torch.log(torch.divide(h, ha))
 
     # Pack as a Nx4 matrix
-    return torch.stack((tx,ty,tw,th))
+    return torch.stack((tx,ty,tw,th),axis=1)
 
 # Function converts bounding boxes from centroids representation
 # to corners representation:
 def centroids_to_corners(offsets, anchor_boxes):
+
+    # Repeat anchor boxes to match size of offsets
+    num_batches = offsets.shape[0]//anchor_boxes.shape[0]
+    anchor_boxes = anchor_boxes.repeat(num_batches, 1)
 
     # Extract the four corners of the bounding box
     tx = offsets[:,0]
@@ -52,6 +56,7 @@ def centroids_to_corners(offsets, anchor_boxes):
     th = offsets[:,3]
 
     # Extract the four corners of the anchor boxes
+    print(anchor_boxes.shape)
     xmin = anchor_boxes[:,0]
     ymin = anchor_boxes[:,1]
     xmax = anchor_boxes[:,2]
@@ -78,5 +83,5 @@ def centroids_to_corners(offsets, anchor_boxes):
     ymax = ymin + h
 
     # Pack as a Nx4 matrix
-    return torch.stack((xmin,ymin,xmax,ymax))
+    return torch.stack((xmin,ymin,xmax,ymax),axis=1)
 
