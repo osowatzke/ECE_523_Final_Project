@@ -12,9 +12,10 @@ from torch.utils.data.sampler import Sampler
 from BackboneNetwork import BackboneNetwork
 import numpy as np
 from ClassConstants import ClassConstants
+import math
 
-IMG_HEIGHT = 20
-IMG_WIDTH = 16
+IMG_HEIGHT = 7
+IMG_WIDTH = 7
 IMG_CHANNELS = 2048
 
 BACKBONE_FLAG = True    # True = run data through backbone before classifier
@@ -31,16 +32,19 @@ class classifierNet(nn.Module):
         self.labels = classes.LABELS
 
         # First fully connected layer
-        self.fc1 = nn.Linear(IMG_HEIGHT*IMG_WIDTH*IMG_CHANNELS, 1024, bias=True)
+        self.fc1 = nn.Linear(IMG_HEIGHT*IMG_WIDTH*IMG_CHANNELS, 1024, bias=True, dtype=torch.float64)
 
         # Second fully connected layer
-        self.fc2 = nn.Linear(512, 2048, bias=True)
+        # self.fc2 = nn.Linear(512, 2048, bias=True, dtype=torch.float64)
 
         # Third fully connected layer
-        self.fc3 = nn.Linear(1024, 1024, bias=True)
+        # self.fc3 = nn.Linear(1024, 1024, bias=True, dtype=torch.float64)
 
         # Fourth fully connected layer
-        self.fc4 = nn.Linear(512, 2*len(self.labels), bias=True)
+        self.fc4 = nn.Linear(512, 2*len(self.labels), bias=True, dtype=torch.float64)
+
+        # Initialize weights
+        # (already done by Pytorch automatically)
 
         # Create data loaders for our datasets; shuffle for training, not for validation
         self.numSamples = num_images_in
@@ -61,35 +65,35 @@ class classifierNet(nn.Module):
             transforms.Normalize((0.5,), (0.5,))])
 
         # Specify loss function
-        self.loss_function = nn.MSELoss()
+        self.loss_function = nn.MSELoss(size_average=None, reduce=None, reduction='mean')
 
 
     def forward(self, x):
 
         # Pass input through layers, with relu and max pooling nonlinearities
-        x = x.float()
+        x = x.double()
         x = self.fc1(x)                     # ??? -> 1024
         x = F.relu(x)
         x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
 
-        x = self.fc2(x)                     # 512 -> 2048
-        x = F.relu(x)
-        x = F.max_pool1d(x, 2, stride=2)    # 2048 -> 1024
+        # x = self.fc2(x)                     # 512 -> 2048
+        # x = F.relu(x)
+        # x = F.max_pool1d(x, 2, stride=2)    # 2048 -> 1024
 
-        x = self.fc3(x)                     # 1024 -> 1024
-        x = F.relu(x)
-        x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
+        # x = self.fc3(x)                     # 1024 -> 1024
+        # x = F.relu(x)
+        # x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
 
         x = self.fc4(x)                     # 512 -> 512
         x = F.relu(x)
         x = F.max_pool1d(x, 2, stride=2)    # 512 -> 256
 
-        self.float()
+        self.double()
 
         # Softmax
         output = F.log_softmax(x, dim=1)
         
-        return output.float()
+        return output.double()
     
 
     def trainOneEpoch(self, epoch_index, tb_writer, backbone=None):
@@ -99,7 +103,7 @@ class classifierNet(nn.Module):
         last_loss = 0.
 
         # Specify optimizer
-        optimizer = torch.optim.SGD(self.parameters(), lr=0.001, momentum=0.9)
+        optimizer = torch.optim.SGD(self.parameters(), lr=0, momentum=0.9)
 
         # For each batch
         for i, data in enumerate(self.training_loader):
@@ -107,60 +111,73 @@ class classifierNet(nn.Module):
             # Load data
             inputs, labels = data
 
-            # Number of ROIs
-            j = 0
-            numROIs = 0
-            for j in range(len(labels)):
-                numROIs = numROIs + len(labels[j]["labels"])
-
-            # Hold all data
-            labels_ = np.empty((numROIs, len(self.labels)))
-            imgs_ = torch.zeros([numROIs, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS], dtype=torch.int32)
-            boxes_ = torch.zeros([numROIs, 4], dtype=torch.int32)
-
-            # For each image
-            k = 0
-            for label in labels:
-            
-                # For each ROI in image
-                j = 0
-                for j in range(len(label["labels"])):
-                    class_ = label["labels"][j]
-                    vec_ = torch.zeros(len(self.labels))
-                    vec_[int(class_)] = torch.tensor(1.0)
-                    labels_[k+j,:] = vec_
-                    boxes_[k+j, :] = label["boxes"][j]
-                    j = j + 1
-                k = k + 1
-
             # Run data through backbone
             if backbone:
                 imgs = torch.stack((*inputs,))
                 features = torch.tensor(backbone(imgs))
 
-            # Crop output for each region
-            #TODO: Need to figure out which image each ROI should be pulled from.
+            # Number of ROIs (removing ROIs with class -1)
             j = 0
-            for j in range(numROIs):
-                x1 = int(boxes_[j, 0] / 32)
-                x2 = int(boxes_[j, 1] / 32)
-                y1 = int(boxes_[j, 2] / 32)
-                y2 = int(boxes_[j, 3] / 32)
-                img_ = features[j,x1:x2,y1:y2,:]
-                imgs_[j,:,:,:] = F.interpolate(img_, size=(7, 7, IMG_CHANNELS))
+            numROIs = 0
+            for j in range(len(labels)):
+                numROIs = numROIs + len(labels[j]["labels"] != torch.tensor(-1.))
 
-            # Re-format output to make it compatible with FCL dimensions
+            # Hold all data
+            labels_ = np.empty((numROIs, len(self.labels)))
+            imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH], dtype=torch.float64)
+            boxes_ = torch.zeros([numROIs, 4], dtype=torch.float64)
+
+            # ROI Pooling
+            k = 0
+            for label in labels:
+            
+                # For each ROI in image
+                j = 0
+                numTrueROIs = 0
+                for j in range(len(label["labels"])):
+
+                    # Determine class
+                    class_ = label["labels"][j]
+
+                    # If it's not class -1:
+                    if class_ != torch.tensor(-1.):
+
+                        # Creating ideal output
+                        vec_ = torch.zeros(len(self.labels))
+                        vec_[int(class_)] = torch.tensor(1.0)
+                        labels_[k+numTrueROIs,:] = vec_
+
+                        # Extracting bounding boxes
+                        boxes_[k+numTrueROIs, :] = label["boxes"][j]
+
+                        # Extracting ROIs
+                        x1 = abs(math.floor(boxes_[k+j, 0] / 32))
+                        y1 = abs(math.floor(boxes_[k+j, 1] / 32))
+                        x2 = abs(math.ceil(boxes_[k+j, 2]+1 / 32))
+                        y2 = abs(math.ceil(boxes_[k+j, 3]+1 / 32))
+                        img_ = features[k,:,y1:y2,x1:x2]
+                        imgs_[k+numTrueROIs,:,:,:] = F.interpolate(img_[None,:,:,:], size=(7, 7))
+
+                        numTrueROIs = numTrueROIs + 1
+
+                k = k + 1
+
+            # Re-format feature space to make it compatible with FCL dimensions
             features = torch.flatten(imgs_, start_dim = 1)
 
             # Zero gradients before each batch
             optimizer.zero_grad()
 
             # Run batch through network
-            outputs = self(imgs_)
+            outputs = self(features)
 
             # Calculate loss and gradients
-            loss = self.loss_function(outputs, torch.tensor(labels_).float())
+            loss = self.loss_function(outputs, torch.tensor(labels_).double())
             loss.backward()
+
+            # DEBUG
+            for name, param in self.named_parameters():
+                print(name, torch.isfinite(param.grad).all())
             
             # Adjust weights
             optimizer.step()
@@ -250,8 +267,11 @@ class classifierNet(nn.Module):
 
 if __name__ == "__main__":
 
+    torch.manual_seed(69)
+    torch.autograd.set_detect_anomaly(True)
+
     # Object
-    obj = classifierNet(1200) # Number of images MUST be a multiple of batch size
+    obj = classifierNet(120) # Number of images MUST be a multiple of batch size
 
     # Run training
     obj.runTraining(num_epochs=10)
