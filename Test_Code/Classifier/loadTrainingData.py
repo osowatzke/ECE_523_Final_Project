@@ -2,6 +2,8 @@ from FlirDataset import FlirDataset
 from PathConstants import PathConstants
 from torch.utils.data import DataLoader
 import numpy as np
+from torch.utils.data.sampler import Sampler
+
 
 
 def collate_fn(data):
@@ -19,6 +21,14 @@ def collate_fn(data):
     return images, targets
 
 
+class CustomSampler(Sampler):
+    def __init__(self, indices=None):
+        self.indices = indices
+
+    def __iter__(self):
+        return iter(self.indices)
+
+
 def loadTrainingData(num_images, random):
     #####################################
     # num_images = int, number of images to load
@@ -27,7 +37,7 @@ def loadTrainingData(num_images, random):
 
     # Load in test data
     dataset = FlirDataset(r'C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\FLIR_ADAS_v2\images_thermal_train', downsample=1, num_images=10, device=None)
-    # dataloader = DataLoader(dataset, batch_size=num_images, collate_fn=collate_fn, shuffle=random)
+    dataloader = DataLoader(dataset, batch_size=num_images, collate_fn=collate_fn, shuffle=random)
     
     # # Storing results
     # img_data_all = []

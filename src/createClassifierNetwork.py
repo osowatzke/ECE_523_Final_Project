@@ -71,7 +71,7 @@ class classifierNet(nn.module):
         return output
     
 
-    def train_one_epoch(self, epoch_index, tb_writer):
+    def trainOneEpoch(self, epoch_index, tb_writer):
 
         # Specify optimizer
         optimizer = torch.optim.SGD(self.parameters(), lr=0.001, momentum=0.9)
@@ -120,7 +120,7 @@ class classifierNet(nn.module):
 
             # Track gradient
             self.train(True)
-            avg_loss = self.train_one_poch(epoch_number, writer)
+            avg_loss = self.trainOneEpoch(epoch_number, writer)
 
             running_vloss = 0.0
             self.eval()

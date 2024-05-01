@@ -40,7 +40,7 @@ class PathConstants():
         if cls._use_local_copy:
             cls.DATA_DIR = '../FLIR_ADAS_v2'
         else:
-            cls.DATA_DIR = os.path.join(cls.SRC_DIR,'..','..','..','FLIR_ADAS_v2')
+            cls.DATA_DIR = os.path.join(cls.SRC_DIR,'..','..','FLIR_ADAS_v2')
             cls.DATA_DIR = os.path.abspath(cls.DATA_DIR)
 
     @classmethod
