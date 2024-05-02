@@ -14,6 +14,9 @@ import numpy as np
 from ClassConstants import ClassConstants
 import math
 
+device = torch.device('cuda')
+torch.cuda.set_device(0)
+
 IMG_HEIGHT = 7
 IMG_WIDTH = 7
 IMG_CHANNELS = 2048
@@ -32,22 +35,22 @@ class classifierNet(nn.Module):
         self.labels = classes.LABELS
 
         # First fully connected layer
-        self.fc1 = nn.Linear(IMG_HEIGHT*IMG_WIDTH*IMG_CHANNELS, 512, bias=True, dtype=torch.float64)
+        self.fc1 = nn.Linear(IMG_HEIGHT*IMG_WIDTH*IMG_CHANNELS, 256, bias=True)
 
         # Second fully connected layer
-        # self.fc2 = nn.Linear(512, 2048, bias=True, dtype=torch.float64)
+        self.fc2 = nn.Linear(128, 256, bias=True)
 
         # Third fully connected layer
-        # self.fc3 = nn.Linear(1024, 1024, bias=True, dtype=torch.float64)
+        self.fc3 = nn.Linear(128, 256, bias=True)
 
         # Batch normalization
-        self.m = nn.BatchNorm1d(256, dtype=torch.float64)
+        self.m = nn.BatchNorm1d(128)
 
         # Fourth fully connected layer
-        self.fc4 = nn.Linear(256, 2*len(self.labels), bias=True, dtype=torch.float64)
+        self.fc4 = nn.Linear(128, 2*len(self.labels), bias=True)
 
         # More batch norm
-        self.mm = nn.BatchNorm1d(len(self.labels), dtype=torch.float64)
+        self.mm = nn.BatchNorm1d(len(self.labels))
 
         # Softmax
         self.softmax = torch.nn.Softmax(dim = 1)
@@ -59,14 +62,16 @@ class classifierNet(nn.Module):
         self.numSamples = num_images_in
         PathConstants()
         sampler = LTD.CustomSampler()
+        valid_sampler = LTD.CustomSampler()
         # sampler_indices = np.random.permutation(num_images_in)
-        sampler_indices = range(num_images_in)
+        sampler_indices = range(num_images=num_images_in + num_images_in % 12)
         sampler.indices = sampler_indices
+        valid_sampler.indices = range(num_images_in/100 + (num_images_in/100) % 12)
         self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=num_images_in + num_images_in % 12, downsample=1, device=None)
         # self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/10) + int((num_images_in/10)) % 12, downsample=1, device=None)
-        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=num_images_in + num_images_in % 12, downsample=1, device=None)
+        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=num_images_in/100 + (num_images_in/100) % 12, downsample=1, device=None)
         self.training_loader = torch.utils.data.DataLoader(self.training_set, batch_size=12, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
-        self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=12, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
+        self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=12, collate_fn=LTD.collate_fn, shuffle=False, sampler=valid_sampler)
         print('Training set has {} instances'.format(len(self.training_set)))
         print('Validation set has {} instances'.format(len(self.validation_set)))
 
@@ -83,34 +88,34 @@ class classifierNet(nn.Module):
     def forward(self, x):
 
         # Pass input through layers, with relu and max pooling nonlinearities
-        x = x.double()
-        x = self.fc1(x)                     # ??? -> 1024
+        # x = x.double()
+        x = self.fc1(x)                     # ??? -> 256
         x = F.relu(x)
-        x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
+        x = F.max_pool1d(x, 2, stride=2)    # 256 -> 128
 
-        # x = self.fc2(x)                     # 512 -> 2048
-        # x = F.relu(x)
-        # x = F.max_pool1d(x, 2, stride=2)    # 2048 -> 1024
+        x = self.fc2(x)                     # 128 -> 256
+        x = F.relu(x)
+        x = F.max_pool1d(x, 2, stride=2)    # 256 -> 128
 
-        # x = self.fc3(x)                     # 1024 -> 1024
+        # x = self.fc3(x)                     # 128 -> 256
         # x = F.relu(x)
-        # x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
+        # x = F.max_pool1d(x, 2, stride=2)    # 256 -> 128
         
         x = self.m(x)
 
-        x = self.fc4(x)                     # 512 -> 32
+        x = self.fc4(x)                     # 128 -> 32
         x = F.relu(x)
         x = F.max_pool1d(x, 2, stride=2)    # 32 -> 16
 
         # x = self.mm(x)
 
-        output = x
+        # output = x
 
         # Softmax
         output = F.log_softmax(x, dim=1)
         # output = self.softmax(x)
         
-        return output.double()
+        return output
     
 
     def trainOneEpoch(self, epoch_index, tb_writer, backbone=None):
@@ -143,12 +148,13 @@ class classifierNet(nn.Module):
 
             # Hold all data
             # labels_ = np.empty((numROIs, len(self.labels)))
-            labels_ = torch.zeros([numROIs, len(self.labels)], dtype=torch.float64)
+            labels_ = torch.zeros([numROIs, len(self.labels)]).to(device)
             labels_db = np.empty((12, len(self.labels))) # DEBUG
-            labels_db[:,3] = 1; 
-            imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH], dtype=torch.float64)
-            boxes_ = torch.zeros([numROIs, 4], dtype=torch.float64)
-            boxes_db = []
+            labels_db[:,3] = 1;
+            classes_ = torch.zeros([numROIs]).to(device)
+            imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH]).to(device)
+            boxes_ = torch.zeros([numROIs, 4]).to(device)
+            boxes_db = torch.zeros([numROIs, 5]).to(device)
 
             # ROI Pooling
             # For each image in the batch
@@ -164,23 +170,25 @@ class classifierNet(nn.Module):
                 # For each ROI in image
                 j = 0
                 numTrueROIs = 0
-                temp = torch.zeros(numROIs_this_img, 4)
+                temp = torch.zeros(numROIs_this_img, 4).to(device)
                 for j in range(len(label["labels"])):
 
                     # Determine class
                     class_ = label["labels"][j]
 
                     # If it's not class -1:
-                    if class_ != torch.tensor(-1.):
+                    if class_ != torch.tensor(-1.).to(device):
 
                         # Creating ideal output
                         # vec_ = torch.zeros(len(self.labels))
                         # vec_[int(class_)] = 1.0
                         labels_[totalROIs, int(class_)] = 1.0
+                        classes_[totalROIs] = int(class_)
 
                         # Extracting bounding boxes
                         boxes_[totalROIs, :] = label["boxes"][j]
                         temp[numTrueROIs,:] = label["boxes"][j]
+                        boxes_db[totalROIs] = torch.cat((torch.tensor([k]).to(device), (label["boxes"][j]).to(device)), 0)
 
                         # Extracting ROIs
                         # x1 = abs(math.floor(boxes_[k+j, 0] / 32))
@@ -194,10 +202,10 @@ class classifierNet(nn.Module):
                         numTrueROIs = numTrueROIs + 1
                         totalROIs = totalROIs + 1
                 k = k + 1
-                boxes_db.append(temp)
+                # boxes_db.append(temp)
             
             # Experimental: Pytorch RoI Pooling
-            imgs_pyt = torchvision.ops.roi_pool(features, boxes_db, (7, 7))
+            imgs_pyt = torchvision.ops.roi_pool(features.to(device), boxes_db.to(device), (7, 7))
 
             # Re-format feature space to make it compatible with FCL dimensions
             features = torch.flatten(imgs_pyt, start_dim = 1)
@@ -209,7 +217,8 @@ class classifierNet(nn.Module):
             outputs = self(features)
 
             # Calculate loss and gradients
-            loss = self.loss_function(outputs, labels_)
+            classes_ = classes_.type(torch.LongTensor).to(device)
+            loss = self.loss_function(outputs, classes_)
             loss.backward()
 
             # Clip gradient
@@ -276,10 +285,11 @@ class classifierNet(nn.Module):
                             vnumROIs = vnumROIs + int(vlabels[j]["labels"][p] != -1.)
 
                     # Hold all data
-                    vlabels_ = torch.zeros([vnumROIs, len(self.labels)], dtype=torch.float64)
-                    vimgs_ = torch.zeros([vnumROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH], dtype=torch.float64)
-                    vboxes_ = torch.zeros([vnumROIs, 4], dtype=torch.float64)
-                    vboxes_db = []
+                    vlabels_ = torch.zeros([vnumROIs, len(self.labels)]).to(device)
+                    vclasses_ = torch.zeros([vnumROIs]).to(device)
+                    vimgs_ = torch.zeros([vnumROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH]).to(device)
+                    vboxes_ = torch.zeros([vnumROIs, 4]).to(device)
+                    vboxes_db = torch.zeros([vnumROIs, 5]).to(device)
 
                     # ROI Pooling
                     k = 0
@@ -294,21 +304,23 @@ class classifierNet(nn.Module):
                         # For each ROI in image
                         j = 0
                         vnumTrueROIs = 0
-                        vtemp = torch.zeros(vnumROIs_this_img, 4)
+                        vtemp = torch.zeros(vnumROIs_this_img, 4).to(device)
                         for j in range(len(vlabel["labels"])):
 
                             # Determine class
                             vclass_ = vlabel["labels"][j]
 
                             # If it's not class -1:
-                            if vclass_ != torch.tensor(-1.):
+                            if vclass_ != torch.tensor(-1.).to(device):
 
                                 # Creating ideal output
                                 vlabels_[vtotalROIs, int(vclass_)] = 1.0
+                                vclasses_[vtotalROIs] = int(vclass_)
 
                                 # Extracting bounding boxes
                                 vboxes_[vtotalROIs, :] = vlabel["boxes"][j]
                                 vtemp[vnumTrueROIs,:] = vlabel["boxes"][j]
+                                vboxes_db[vtotalROIs] = torch.cat((torch.tensor([k]).to(device), (vlabel["boxes"][j]).to(device)), 0)
 
                                 # Extracting ROIs
                                 # x1 = abs(math.floor(vboxes_[k+j, 0] / 32))
@@ -321,10 +333,10 @@ class classifierNet(nn.Module):
                                 vnumTrueROIs = vnumTrueROIs + 1
                                 vtotalROIs = vtotalROIs + 1
                         k = k + 1
-                        vboxes_db.append(vtemp)
+                        # vboxes_db.append(vtemp)
             
                     # Experimental: Pytorch RoI Pooling
-                    vimgs_pyt = torchvision.ops.roi_pool(vfeatures, vboxes_db, (7, 7))
+                    vimgs_pyt = torchvision.ops.roi_pool(vfeatures.to(device), vboxes_db.to(device), (7, 7))
 
                     # Re-format feature space to make it compatible with FCL dimensions
                     vfeatures = torch.flatten(vimgs_pyt, start_dim = 1)
@@ -333,7 +345,8 @@ class classifierNet(nn.Module):
                     voutputs = self(vfeatures)
 
                     # Calculate loss and gradients
-                    vloss = self.loss_function(voutputs, vlabels_)
+                    vclasses_ = vclasses_.type(torch.LongTensor).to(device)
+                    vloss = self.loss_function(voutputs, vclasses_)
                     running_vloss += vloss
 
             avg_vloss = running_vloss / (i + 1)
@@ -361,7 +374,7 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
 
     # Object
-    obj = classifierNet(1000) # Number of images MUST be a multiple of batch size
+    obj = classifierNet(1000).cuda() # Number of images MUST be a multiple of batch size
 
     # Run training
     obj.runTraining(num_epochs=1000)
