@@ -5,8 +5,9 @@ import math
 # to centroid representation:
 def corners_to_centroid(bboxes, anchor_boxes):
 
-    # print(bboxes.shape)
-    # print(anchor_boxes.shape)
+    # Repeat anchor boxes to match size of offsets
+    num_batches = bboxes.shape[0]//anchor_boxes.shape[0]
+    anchor_boxes = anchor_boxes.repeat(num_batches, 1)
 
     # Extract the four corners of the bounding box
     xmin = bboxes[:,0]

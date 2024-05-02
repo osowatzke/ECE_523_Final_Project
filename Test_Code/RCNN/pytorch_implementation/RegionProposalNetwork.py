@@ -151,22 +151,19 @@ class RegionProposalNetwork2(nn.Module):
         cls_pred  = cls_pred.reshape(len(feature_maps), -1)
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
-        #print(cls_pred)
-        #print(bbox_pred)
-
-        # Get labels 
+        # Get truth data
         cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
 
-        # print(bbox_truth[0][cls_truth[0] > 0])
-        # print(bbox_truth[1][cls_truth[1] > 0])
-        #print(cls_truth[0].shape)
-        #print(bbox_truth[0][cls_truth[0] > 0])
+        # Convert ground truth bounding boxes to ground truth offset
+        bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
 
-        # print(len(cls_truth))
-        # print(len(bbox_truth))
-        bbox_off_truth = torch.zeros((len(feature_maps),) + bbox_truth[0].shape)
-        for i, bbox in enumerate(bbox_truth):
-            bbox_off_truth[i,:,:] = bbox_utils.corners_to_centroid(bbox, self.anchor_boxes)
+        # Reshape to correct dimensions
+        cls_truth      = cls_truth.reshape(len(feature_maps), -1)
+        bbox_off_truth = bbox_off_truth.reshape(len(feature_maps), -1, 4)
+
+        # bbox_off_truth = torch.zeros((len(feature_maps),) + bbox_truth[0].shape)
+        # for i, bbox in enumerate(bbox_truth):
+        #     bbox_off_truth[i,:,:] = bbox_utils.corners_to_centroid(bbox, self.anchor_boxes)
 
         bbox_off_pred = bbox_off_pred.reshape(bbox_off_truth.shape)
         # print(bbox_off_truth)
@@ -225,6 +222,8 @@ class RegionProposalNetwork2(nn.Module):
                 ref_boxes = targets[max_idx]
             all_labels.append(labels)
             all_ref_boxes.append(ref_boxes)
+        all_labels = torch.cat(all_labels)
+        all_ref_boxes = torch.cat(all_ref_boxes)
         return all_labels, all_ref_boxes
 
     def get_best_proposals(self, bbox_pred, cls_pred):
@@ -322,7 +321,7 @@ class RegionProposalNetwork2(nn.Module):
 
         # cls_pred = torch.cat(cls_pred)
         cls_pred = cls_pred.ravel()
-        cls_truth = torch.cat(cls_truth)
+        cls_truth = cls_truth.ravel() #torch.cat(cls_truth)
 
         bbox_loss = F.smooth_l1_loss(
             bbox_off_pred[pos_samp],
