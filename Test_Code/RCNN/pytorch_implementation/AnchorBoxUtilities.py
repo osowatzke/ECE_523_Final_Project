@@ -55,7 +55,6 @@ def gen_anchor_boxes(
 def select_closest_anchors(all_targets, anchor_boxes, max_iou_thresh, min_iou_thresh):
     all_labels = []
     all_ref_boxes = []
-    # print(len(all_targets))
     for targets in all_targets:
         if targets.numel() == 0:
             labels = torch.zeros(anchor_boxes.shape[0])

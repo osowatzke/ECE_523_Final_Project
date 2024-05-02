@@ -55,6 +55,7 @@ def sample_pred(all_labels, batch_size, pos_frac):
     for labels in all_labels:
         pos_idx = torch.where(labels == 1)[0]
         neg_idx = torch.where(labels == 0)[0]
+        # print(neg_idx[1000:1010])
         max_pos = batch_size*pos_frac
         num_pos = min(pos_idx.numel(), max_pos)
         num_neg = batch_size - num_pos
@@ -92,17 +93,18 @@ class RegionProposalNetwork2(nn.Module):
         def forward(self, feature_maps):
 
             # Create empty list for layer outputs
-            cls_pred = [None] * len(feature_maps)
-            bbox_offsets = [None] * len(feature_maps)
+            # cls_pred = [None] * len(feature_maps)
+            # bbox_offsets = [None] * len(feature_maps)
 
             # Loop over feature maps for each batch
-            for i, feature_map in enumerate(feature_maps):
-                shared_conv = F.relu(self.conv1(feature_map))
-                # cls_pred[i] = F.sigmoid(self.conv2(shared_conv))
-                cls_pred[i] = self.conv2(shared_conv)
-                bbox_offsets[i] = self.conv3(shared_conv)
+            # for i, feature_map in enumerate(feature_maps):
+            shared_conv = F.relu(self.conv1(feature_maps))
 
-            return cls_pred, bbox_offsets
+            # cls_pred[i] = F.sigmoid(self.conv2(shared_conv))
+            cls_pred = self.conv2(shared_conv)
+            bbox_offsets = self.conv3(shared_conv)
+
+            return [cls_pred], [bbox_offsets]
 
     # Class constructor
     def __init__(
@@ -135,8 +137,6 @@ class RegionProposalNetwork2(nn.Module):
         in_channels = feature_map_size[-3]
         num_anchors = len(anchor_box_sizes) * len(aspect_ratios)
 
-        torch.manual_seed(0)
-
         # Create convolutional neural network layers
         self.conv_layers = self.ConvLayers(in_channels, hidden_layer_channels, num_anchors)
 
@@ -149,8 +149,8 @@ class RegionProposalNetwork2(nn.Module):
         cls_pred = self.format_cls_pred(cls_pred)
         bbox_offsets = self.format_bbox_offsets(bbox_offsets)
 
-        # print(cls_pred)
-        # print(bbox_offsets)
+        #print(cls_pred.shape)
+        #print(bbox_offsets.shape)
 
         # Get bounding box from offsets
         bbox_pred = bbox_utils.centroids_to_corners(bbox_offsets, self.anchor_boxes)
@@ -159,12 +159,14 @@ class RegionProposalNetwork2(nn.Module):
         cls_pred = cls_pred.reshape(len(feature_maps), -1)
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
-        # print(cls_pred)
-        # print(bbox_pred)
+        #print(cls_pred)
+        #print(bbox_pred)
 
         # Get labels 
         cls_truth, bbox_truth = select_closest_anchors(targets, self.anchor_boxes, 0.5, 0.3)
 
+        # print(bbox_truth[0][cls_truth[0] > 0])
+        # print(bbox_truth[1][cls_truth[1] > 0])
         #print(cls_truth[0].shape)
         #print(bbox_truth[0][cls_truth[0] > 0])
 
@@ -173,6 +175,12 @@ class RegionProposalNetwork2(nn.Module):
         bbox_off_truth = torch.zeros((len(feature_maps),) + bbox_truth[0].shape)
         for i, bbox in enumerate(bbox_truth):
             bbox_off_truth[i,:,:] = bbox_utils.corners_to_centroid(bbox, self.anchor_boxes)
+
+        bbox_offsets = bbox_offsets.reshape(bbox_off_truth.shape)
+        # print(bbox_off_truth.shape)
+        # print(bbox_offsets.shape)
+        # print(cls_truth[0].shape)
+        # print(cls_pred[0].shape)
 
         bbox_loss, cls_loss = self.get_loss(bbox_offsets, bbox_off_truth, cls_pred, cls_truth)
 
@@ -271,16 +279,35 @@ class RegionProposalNetwork2(nn.Module):
         # print(cls_pred.shape)
         # print(cls_truth.shape)
 
-        bbox_off_truth = bbox_off_truth[0,:,:]
-
         pos_samp, neg_samp = sample_pred(cls_truth, 128, 0.5)
 
-        pos_samp = torch.cat(pos_samp)
-        neg_samp = torch.cat(neg_samp)
+        # print(neg_samp[0].sort()[0])
+
+        for idx in range(len(pos_samp)):
+            pos_samp[i] = pos_samp[i] + bbox_off_pred.shape[1] * idx
+            neg_samp[i] = neg_samp[i] + bbox_off_pred.shape[1] * idx
+
+        pos_samp = torch.cat(pos_samp).sort()[0]
+        neg_samp = torch.cat(neg_samp).sort()[0]
+
+        # print(pos_samp.shape)
+        # print(pos_samp.sort()[0])
+        # print(neg_samp.shape)
+        # print(neg_samp.sort()[0])
 
         # print(pos_samp.shape)
         # print(neg_samp.shape)
         all_samp = torch.cat([pos_samp, neg_samp])
+
+        bbox_off_pred = bbox_off_pred.reshape(-1,4)
+        bbox_off_truth = bbox_off_truth.reshape(-1,4)
+
+        # print(bbox_off_pred)
+        # print(bbox_off_truth)
+
+        # cls_pred = torch.cat(cls_pred)
+        cls_pred = cls_pred.ravel()
+        cls_truth = torch.cat(cls_truth)
 
         bbox_loss = F.smooth_l1_loss(
             bbox_off_pred[pos_samp],
@@ -291,7 +318,7 @@ class RegionProposalNetwork2(nn.Module):
 
         # print(cls_pred[0].shape)
         # print(cls_truth[0].shape)
-        cls_loss = F.binary_cross_entropy_with_logits(cls_pred[0][all_samp], cls_truth[0][all_samp].type(torch.float))
+        cls_loss = F.binary_cross_entropy_with_logits(cls_pred[all_samp], cls_truth[all_samp].type(torch.float))
 
         return bbox_loss, cls_loss
         # (N, C, _, _) = cls_pred.shape
@@ -321,6 +348,8 @@ def run_network(images, features, targets):
     #print(len(anchor_generator.cell_anchors))
     #print(anchor_generator.cell_anchors[0].shape)
 
+    torch.manual_seed(0)
+
     rpn = RegionProposalNetwork(
         anchor_generator=anchor_generator,
         head=RPNHead(feature_maps[0].shape[1],9),
@@ -333,13 +362,15 @@ def run_network(images, features, targets):
         nms_thresh=0.7,
         score_thresh=1e-3)
     
-    features = list(features.values())
-    # print(features[0].shape)
+    rpn.train()
 
     torch.manual_seed(0)
 
-    head = RPNHead(2048,9)
-    objectness, pred_bbox_deltas = head(features)
+    features = list(features.values())
+    # print(features[0].shape)
+
+    #head = rpn.head(2048,9)
+    objectness, pred_bbox_deltas = rpn.head(features)
     anchors = anchor_generator(images, features)
     # print(anchors[0].shape)
     #A = anchors.reshape(3, -1, 3, 4)
@@ -352,8 +383,8 @@ def run_network(images, features, targets):
     num_anchors_per_level = [s[0] * s[1] * s[2] for s in num_anchors_per_level_shape_tensors]
     objectness, pred_bbox_deltas = concat_box_prediction_layers(objectness, pred_bbox_deltas)
 
-    # print(objectness)
-    # print(pred_bbox_deltas)
+    #print(objectness.shape)
+    #print(pred_bbox_deltas.shape)
     # 
     # print(objectness.shape)
     # print(pred_bbox_deltas.shape)
@@ -419,10 +450,10 @@ def run_network(images, features, targets):
     #print(pred_boxes)
     '''
     proposals = proposals.view(num_images, -1, 4)
-    # print(proposals)
-    # print(objectness)
+    #print(proposals)
+    #print(objectness)
     boxes, scores = rpn.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
-    
+    # print(boxes)
     '''
     num_images = proposals.shape[0]
     device = proposals.device
@@ -493,6 +524,7 @@ def run_network(images, features, targets):
         raise ValueError("targets should not be None")
     labels, matched_gt_boxes = rpn.assign_targets_to_anchors(anchors, targets)
 
+    '''
     labels = []
     matched_gt_boxes = []
     for anchors_per_image, targets_per_image in zip(anchors, targets):
@@ -532,19 +564,91 @@ def run_network(images, features, targets):
 
         labels.append(labels_per_image)
         matched_gt_boxes.append(matched_gt_boxes_per_image)
-
+    '''
     # print(matched_gt_boxes[0][labels[0] > 0])
+    # print(matched_gt_boxes[0][labels[0] > 0])
+    # print(matched_gt_boxes[1][labels[1] > 0])
 
     regression_targets = box_coder.encode(matched_gt_boxes, anchors)
 
+    # print(regression_targets)
+
+    '''
     loss_objectness, loss_rpn_box_reg = rpn.compute_loss(
         objectness, pred_bbox_deltas, labels, regression_targets
     )
+    '''
+
+    # print(torch.where(labels[0] == 0)[0].shape)
+    # print(torch.where(labels[1] == 0)[0].shape)
+    # print(torch.where(labels[0] == 0)[0][1000:1010])
+    # print(torch.where(labels[1] == 0)[0][1000:1010])
+    sampled_pos_inds, sampled_neg_inds = rpn.fg_bg_sampler(labels)
+    sampled_pos_inds = torch.where(torch.cat(sampled_pos_inds, dim=0))[0]
+    sampled_neg_inds = torch.where(torch.cat(sampled_neg_inds, dim=0))[0]
+    # print(sampled_pos_inds.shape)
+    # print(sampled_pos_inds)
+    # print(sampled_neg_inds.shape)
+    # print(sampled_neg_inds)
+
+    sampled_inds = torch.cat([sampled_pos_inds, sampled_neg_inds], dim=0)
+
+    objectness = objectness.flatten()
+
+    labels = torch.cat(labels, dim=0)
+    regression_targets = torch.cat(regression_targets, dim=0)
+
+    # print(pred_bbox_deltas)
+    # print(regression_targets)
+
+    loss_rpn_box_reg = F.smooth_l1_loss(
+        pred_bbox_deltas[sampled_pos_inds],
+        regression_targets[sampled_pos_inds],
+        beta=1 / 9,
+        reduction="sum",
+    ) / (sampled_inds.numel())
+
+    loss_objectness = F.binary_cross_entropy_with_logits(objectness[sampled_inds], labels[sampled_inds])
+
+
     losses = {
         "loss_objectness": loss_objectness,
         "loss_rpn_box_reg": loss_rpn_box_reg,
     }
     return boxes, losses
+
+def fg_bg_sampler(matched_idxs, batch_size_per_image=128, positive_fraction=0.5):
+    pos_idx = []
+    neg_idx = []
+    for matched_idxs_per_image in matched_idxs:
+        positive = torch.where(matched_idxs_per_image >= 1)[0]
+        negative = torch.where(matched_idxs_per_image == 0)[0]
+
+        num_pos = int(batch_size_per_image * positive_fraction)
+        # protect against not enough positive examples
+        num_pos = min(positive.numel(), num_pos)
+        num_neg = batch_size_per_image - num_pos
+        # protect against not enough negative examples
+        num_neg = min(negative.numel(), num_neg)
+
+        # randomly select positive and negative examples
+        perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos]
+        perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg]
+
+        pos_idx_per_image = positive[perm1]
+        neg_idx_per_image = negative[perm2]
+
+        # create binary mask from indices
+        pos_idx_per_image_mask = torch.zeros_like(matched_idxs_per_image, dtype=torch.uint8)
+        neg_idx_per_image_mask = torch.zeros_like(matched_idxs_per_image, dtype=torch.uint8)
+
+        pos_idx_per_image_mask[pos_idx_per_image] = 1
+        neg_idx_per_image_mask[neg_idx_per_image] = 1
+
+        pos_idx.append(pos_idx_per_image_mask)
+        neg_idx.append(neg_idx_per_image_mask)
+
+    return pos_idx, neg_idx
 
 if __name__ == "__main__":
     # anchor_generator = AnchorGenerator()
@@ -590,7 +694,7 @@ if __name__ == "__main__":
     # print(pred_bbox.shape)
     # rpn([feature_map], [targets[0]])
 
-    num_images = 1
+    num_images = 2
 
     PathConstants()
     dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=num_images)
@@ -615,16 +719,31 @@ if __name__ == "__main__":
 
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
-    num_epochs = 1
+    torch.manual_seed(0)
+
+    num_epochs = 10
+    batch_size = 2
+    num_batches = math.ceil(num_images/batch_size)
     for epoch in range(num_epochs):
         idx = torch.randperm(num_images)
-        for batch, i in enumerate(idx):
+        # torch.manual_seed(0)
+        for batch in range(num_batches):
+            s = batch*batch_size
+            e = s + batch_size
+            e = max(e, num_images)
+            batch = []
+            tgts = []
+            for i in idx[s:e]:
+                batch.append(feature_maps[i])
+                tgts.append(targets[i])
             optimizer.zero_grad()
-            _, loss_dict = rpn([feature_maps[i]],[targets[i]])
+            #_, loss_dict = rpn(batch, tgts)
+            _, loss_dict = rpn(torch.concat(batch),tgts)
             losses = sum(loss for loss in loss_dict.values())
             losses.backward()
             optimizer.step()
         print(epoch, losses.item())
+        print(torch.get_rng_state()[:10])
 
     print()
 
@@ -659,24 +778,45 @@ if __name__ == "__main__":
     
     rpn.train()
 
-    #torch.manual_seed(0)
-
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
+    
+    torch.manual_seed(0)
 
-    num_epochs = 1
+    num_epochs = 10
+    batch_size = 2
+    num_batches = math.ceil(num_images/batch_size)
+    # transform = GeneralizedRCNNTransform()
     for epoch in range(num_epochs):
         idx = torch.randperm(num_images)
-        for batch, i in enumerate(idx):
+        # torch.manual_seed(0)
+        for batch in range(num_batches):
+            s = batch*batch_size
+            e = s + batch_size
+            e = max(e, num_images)
+            imgs = []
+            #batch = {}
+            tgts = []
+            batch = []
+            for i in idx[s:e]:
+                imgs.append(images[i])
+                #batch[i] = feature_maps[i]
+                batch.append(feature_maps[i])
+                tgts.append({'boxes':targets[i]})
+            imgs = torch.cat(imgs)
+            batch = {'0' : torch.cat(batch)}
+            num_imgs = e - s
             optimizer.zero_grad()
             # print(targets[i].shape)
             # print(feature_maps[i].shape)
-            args = [ImageList(images[i],(images[i].shape[-2:],)),{'0':feature_maps[i]},[{'boxes':targets[i]}]]
+            # args = [ImageList(images[i],(images[i].shape[-2:],)),{'0':feature_maps[i]},[{'boxes':targets[i]}]]
+            args = [ImageList(imgs,(images[i].shape[-2:],)*num_imgs),batch,tgts]
             #_, loss_dict = run_network(*args)
             _, loss_dict = rpn(*args)
             losses = sum(loss for loss in loss_dict.values())
             losses.backward()
             optimizer.step()
         print(epoch, losses.item())
+        print(torch.get_rng_state()[:10])
 
 # anchor_generator = AnchorGenerator()
 # images = ImageList(torch.zeros(3,512,640), [(3,512,640)])
