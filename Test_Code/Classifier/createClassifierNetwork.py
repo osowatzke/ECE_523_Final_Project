@@ -21,7 +21,7 @@ IMG_HEIGHT = 7
 IMG_WIDTH = 7
 IMG_CHANNELS = 2048
 
-BATCH_SIZE = 24
+BATCH_SIZE = 48
 
 BACKBONE_FLAG = True    # True = run data through backbone before classifier
 
@@ -65,13 +65,11 @@ class classifierNet(nn.Module):
         PathConstants()
         sampler = LTD.CustomSampler()
         valid_sampler = LTD.CustomSampler()
-        # sampler_indices = np.random.permutation(num_images_in)
-        sampler_indices = range(int(num_images_in + BATCH_SIZE % num_images_in))
-        sampler.indices = sampler_indices
-        valid_sampler.indices = range(int(num_images_in/1000 + BATCH_SIZE % (num_images_in/1000)))
-        self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=int(num_images_in + BATCH_SIZE % num_images_in), downsample=1, device=None)
+        sampler.indices = range(int(num_images_in - num_images_in % BATCH_SIZE))
+        valid_sampler.indices = range(int(BATCH_SIZE))
+        self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=int(num_images_in - num_images_in % BATCH_SIZE), downsample=1, device=None)
         # self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/10) + int((num_images_in/10)) % BATCH_SIZE, downsample=1, device=None)
-        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/1000 + BATCH_SIZE % (num_images_in/1000)), downsample=1, device=None)
+        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(BATCH_SIZE), downsample=1, device=None)
         self.training_loader = torch.utils.data.DataLoader(self.training_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
         self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=valid_sampler)
         print('Training set has {} instances'.format(len(self.training_set)))
@@ -207,7 +205,7 @@ class classifierNet(nn.Module):
                 # boxes_db.append(temp)
             
             # Experimental: Pytorch RoI Pooling
-            imgs_pyt = torchvision.ops.roi_pool(features.to(device), boxes_db.to(device), (7, 7))
+            imgs_pyt = torchvision.ops.roi_pool(features.to(device), boxes_db.to(device), (7, 7), 0.03125)
 
             # Re-format feature space to make it compatible with FCL dimensions
             features = torch.flatten(imgs_pyt, start_dim = 1)
@@ -338,7 +336,7 @@ class classifierNet(nn.Module):
                         # vboxes_db.append(vtemp)
             
                     # Experimental: Pytorch RoI Pooling
-                    vimgs_pyt = torchvision.ops.roi_pool(vfeatures.to(device), vboxes_db.to(device), (7, 7))
+                    vimgs_pyt = torchvision.ops.roi_pool(vfeatures.to(device), vboxes_db.to(device), (7, 7), 0.03125)
 
                     # Re-format feature space to make it compatible with FCL dimensions
                     vfeatures = torch.flatten(vimgs_pyt, start_dim = 1)
@@ -377,7 +375,7 @@ if __name__ == "__main__":
 
     # Object
     obj = classifierNet(10700).cuda()
-    obj.load_state_dict(torch.load("model_20240502_115006_7"))
+    # obj.load_state_dict(torch.load("model_20240502_115006_7"))
 
     # Run training
     obj.runTraining(num_epochs=1000)
