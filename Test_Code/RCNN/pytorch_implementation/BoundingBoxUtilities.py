@@ -1,8 +1,12 @@
 import torch
+import math
 
 # Function converts bounding boxes from corners representation
 # to centroid representation:
 def corners_to_centroid(bboxes, anchor_boxes):
+
+    # print(bboxes.shape)
+    # print(anchor_boxes.shape)
 
     # Extract the four corners of the bounding box
     xmin = bboxes[:,0]
@@ -56,7 +60,7 @@ def centroids_to_corners(offsets, anchor_boxes):
     th = offsets[:,3]
 
     # Extract the four corners of the anchor boxes
-    print(anchor_boxes.shape)
+    # print(anchor_boxes.shape)
     xmin = anchor_boxes[:,0]
     ymin = anchor_boxes[:,1]
     xmax = anchor_boxes[:,2]
@@ -73,12 +77,12 @@ def centroids_to_corners(offsets, anchor_boxes):
     # Determine centers
     x = tx*wa + xa
     y = ty*ha + ya
-    w = wa*torch.exp(tw)
-    h = ha*torch.exp(th)
+    w = wa*torch.exp(torch.clamp(tw, max=math.log(1000.0/16)))
+    h = ha*torch.exp(torch.clamp(th, max=math.log(1000.0/16)))
 
     # Get corners representation
     xmin = x - w/2
-    ymin = y - y/2
+    ymin = y - h/2
     xmax = xmin + w
     ymax = ymin + h
 

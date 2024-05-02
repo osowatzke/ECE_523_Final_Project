@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torchvision.ops import box_iou
 
 def gen_anchor_boxes(
     image_size,
@@ -50,3 +51,24 @@ def gen_anchor_boxes(
     # Stack vectors to form Nx4 array of anchor boxes
     anchor_boxes = torch.Tensor(np.stack((xmin, ymin, xmax, ymax), axis=1))
     return anchor_boxes
+
+def select_closest_anchors(all_targets, anchor_boxes, max_iou_thresh, min_iou_thresh):
+    all_labels = []
+    all_ref_boxes = []
+    # print(len(all_targets))
+    for targets in all_targets:
+        if targets.numel() == 0:
+            labels = torch.zeros(anchor_boxes.shape[0])
+            ref_boxes = torch.zeros(anchor_boxes.shape)
+        else:
+            iou = box_iou(targets, anchor_boxes) # N x M for N x 4 and M x 4 inputs
+            max_val, max_idx = iou.max(dim=0)
+            pos_idx = torch.where(max_val > max_iou_thresh)
+            neg_idx = torch.where(max_val < min_iou_thresh)
+            labels = torch.full((anchor_boxes.shape[0],), -1)
+            labels[pos_idx] = 1
+            labels[neg_idx] = 0
+            ref_boxes = targets[max_idx]
+        all_labels.append(labels)
+        all_ref_boxes.append(ref_boxes)
+    return all_labels, all_ref_boxes
