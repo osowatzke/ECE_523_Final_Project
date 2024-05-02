@@ -5,6 +5,7 @@ from torchvision.models.detection.rpn import RegionProposalNetwork
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 from torchvision.models.detection.image_list import ImageList
 import torchvision.ops.boxes as box_ops
+import torchvision.ops as ops
 import torch
 from torchvision.models.detection.rpn import RPNHead, concat_box_prediction_layers
 from torchvision.models.detection.rpn import det_utils
@@ -147,14 +148,14 @@ class RegionProposalNetwork2(nn.Module):
         bbox_pred = bbox_utils.centroids_to_corners(bbox_off_pred, self.anchor_boxes)
 
         # Reshape to correct dimensions
-        cls_pred = cls_pred.reshape(len(feature_maps), -1)
+        cls_pred  = cls_pred.reshape(len(feature_maps), -1)
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
         #print(cls_pred)
         #print(bbox_pred)
 
         # Get labels 
-        cls_truth, bbox_truth = select_closest_anchors(targets, self.anchor_boxes, 0.5, 0.3)
+        cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
 
         # print(bbox_truth[0][cls_truth[0] > 0])
         # print(bbox_truth[1][cls_truth[1] > 0])
@@ -202,6 +203,30 @@ class RegionProposalNetwork2(nn.Module):
         x = x.reshape(-1, w)
         return x
     
+    def get_ground_truth_data(self, all_targets, max_iou_thresh, min_iou_thresh):
+        all_labels = []
+        all_ref_boxes = []
+        for targets in all_targets:
+            if targets.numel() == 0:
+                labels = torch.zeros(self.anchor_boxes.shape[0])
+                ref_boxes = torch.zeros(self.anchor_boxes.shape)
+            else:
+                iou = ops.box_iou(targets, self.anchor_boxes) # N x M for N x 4 and M x 4 inputs
+                max_val, max_idx = iou.max(dim=0)
+                pos_idx = torch.where((max_val >= max_iou_thresh))
+                neg_idx = torch.where(max_val < min_iou_thresh)
+                labels = torch.full((self.anchor_boxes.shape[0],), -1)
+                labels[pos_idx] = 1
+                labels[neg_idx] = 0
+                temp, match_idx = iou.max(dim=1)
+                # THIS IS A BUG!!!!!!!!!
+                match_idx = torch.where(temp[:,None] == iou)[1]
+                labels[match_idx] = 1
+                ref_boxes = targets[max_idx]
+            all_labels.append(labels)
+            all_ref_boxes.append(ref_boxes)
+        return all_labels, all_ref_boxes
+
     def get_best_proposals(self, bbox_pred, cls_pred):
 
         pre_nms_top_n = 512

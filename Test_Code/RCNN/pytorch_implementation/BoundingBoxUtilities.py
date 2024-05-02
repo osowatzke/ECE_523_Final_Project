@@ -53,9 +53,6 @@ def centroids_to_corners(offsets, anchor_boxes):
     num_batches = offsets.shape[0]//anchor_boxes.shape[0]
     anchor_boxes = anchor_boxes.repeat(num_batches, 1)
 
-    #print(offsets)
-    #print(anchor_boxes)
-
     # Extract the four corners of the bounding box
     tx = offsets[:,0]
     ty = offsets[:,1]
@@ -73,15 +70,9 @@ def centroids_to_corners(offsets, anchor_boxes):
     wa = xmax - xmin
     ha = ymax - ymin
 
-    #print(wa)
-    #print(ha)
-
     # Get box centers
     xa = xmin + wa/2
     ya = ymin + ha/2
-
-    #print(xa)
-    #print(ya)
 
     # Determine centers
     x = tx*wa + xa
