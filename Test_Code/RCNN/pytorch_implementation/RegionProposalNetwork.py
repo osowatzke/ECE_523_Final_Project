@@ -200,31 +200,57 @@ class RegionProposalNetwork2(nn.Module):
         x = x.reshape(-1, w)
         return x
     
-    def get_ground_truth_data(self, all_targets, max_iou_thresh, min_iou_thresh):
-        all_labels = []
-        all_ref_boxes = []
-        for targets in all_targets:
-            if targets.numel() == 0:
-                labels = torch.zeros(self.anchor_boxes.shape[0])
-                ref_boxes = torch.zeros(self.anchor_boxes.shape)
-            else:
-                iou = ops.box_iou(targets, self.anchor_boxes) # N x M for N x 4 and M x 4 inputs
+    def get_ground_truth_data(self, targets, max_iou_thresh, min_iou_thresh):
+
+        # Allocate tensors for truth data
+        cls_truth  = torch.zeros((len(targets), self.anchor_boxes.shape[0]))
+        bbox_truth = torch.zeros((len(targets),) + self.anchor_boxes.shape)
+
+        # Populate truth data
+        for idx in range(len(targets)):
+
+            # Only change default value if there are targets in image
+            if targets[idx].numel() != 0:
+
+                # Get IOU between every target and anchor box
+                iou = ops.box_iou(targets[idx], self.anchor_boxes)
+
+                # Determine which ground truth box provides the maximum IOU
                 max_val, max_idx = iou.max(dim=0)
-                pos_idx = torch.where((max_val >= max_iou_thresh))
-                neg_idx = torch.where(max_val < min_iou_thresh)
-                labels = torch.full((self.anchor_boxes.shape[0],), -1)
-                labels[pos_idx] = 1
-                labels[neg_idx] = 0
-                temp, match_idx = iou.max(dim=1)
+
+                # Select the best ground truth box as truth data
+                # The class will be used to mask out invalid values
+                bbox_truth[idx,:,:] = targets[idx][max_idx,:]
+
+                # Default the class data to -1 for invalid bounding box
+                cls_truth[idx,:] = torch.full((self.anchor_boxes.shape[0],), -1)
+
+                # Determine which anchor boxes are foreground
+                fg_idx = torch.where(max_val >= max_iou_thresh)[0]
+
+                # Determine which parts of image are 
+                bg_idx = torch.where(max_val < min_iou_thresh)[0]
+                
+                # Update the true classes of data
+                # 1 => foreground
+                # 0 => background
+                cls_truth[idx,fg_idx] = 1
+                cls_truth[idx,bg_idx] = 0
+
+                # Determine which anchor box is maximally overlapped with bounding box
+                max_val, max_idx = iou.max(dim=1)
+
                 # THIS IS A BUG!!!!!!!!!
-                match_idx = torch.where(temp[:,None] == iou)[1]
-                labels[match_idx] = 1
-                ref_boxes = targets[max_idx]
-            all_labels.append(labels)
-            all_ref_boxes.append(ref_boxes)
-        all_labels = torch.cat(all_labels)
-        all_ref_boxes = torch.cat(all_ref_boxes)
-        return all_labels, all_ref_boxes
+                max_idx = torch.where(max_val[:,None] == iou)[1]
+
+                # Ensure each object has at least one bounding box
+                cls_truth[idx, max_idx] = 1
+
+        # Flatten data
+        cls_truth  = cls_truth.ravel()
+        bbox_truth = bbox_truth.reshape(-1,4)
+         
+        return cls_truth, bbox_truth
 
     def get_best_proposals(self, bbox_pred, cls_pred):
 
