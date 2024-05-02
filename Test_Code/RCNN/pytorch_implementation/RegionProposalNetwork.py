@@ -95,20 +95,10 @@ class RegionProposalNetwork2(nn.Module):
                         torch.nn.init.constant_(layer.bias, 0)  # type: ignore[arg-type]
 
         def forward(self, feature_maps):
-
-            # Create empty list for layer outputs
-            # cls_pred = [None] * len(feature_maps)
-            # bbox_offsets = [None] * len(feature_maps)
-
-            # Loop over feature maps for each batch
-            # for i, feature_map in enumerate(feature_maps):
             shared_conv = F.relu(self.conv1(feature_maps))
-
-            # cls_pred[i] = F.sigmoid(self.conv2(shared_conv))
             cls_pred = self.conv2(shared_conv)
             bbox_offsets = self.conv3(shared_conv)
-
-            return [cls_pred], [bbox_offsets]
+            return cls_pred, bbox_offsets
 
     # Class constructor
     def __init__(
@@ -211,18 +201,13 @@ class RegionProposalNetwork2(nn.Module):
         #print(bbox_truth)
 
     def format_cls_pred(self, cls_pred):
-        cls_pred = torch.stack(cls_pred)
-        # print(cls_pred.shape)
-        cls_pred = cls_pred.reshape(cls_pred.shape[0:3] + (-1,))
-        cls_pred = cls_pred.reshape((-1,) + cls_pred.shape[2:])
+        cls_pred = cls_pred.reshape(cls_pred.shape[0:2] + (-1,))
         cls_pred = cls_pred.permute(0,2,1)
         cls_pred = cls_pred.reshape(-1,1)
         return cls_pred
     
     def format_bbox_offsets(self, bbox_offsets):
-        bbox_offsets = torch.stack(bbox_offsets)
-        bbox_offsets = bbox_offsets.reshape(bbox_offsets.shape[0:3] + (-1,))
-        bbox_offsets = bbox_offsets.reshape((-1,) + bbox_offsets.shape[2:])
+        bbox_offsets = bbox_offsets.reshape(bbox_offsets.shape[0:2] + (-1,))
         bbox_offsets = bbox_offsets.permute(0,2,1)
         bbox_offsets = bbox_offsets.reshape(-1,4)
         return bbox_offsets
