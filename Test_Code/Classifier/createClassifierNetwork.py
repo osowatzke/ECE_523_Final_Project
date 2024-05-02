@@ -41,10 +41,10 @@ class classifierNet(nn.Module):
         # self.fc3 = nn.Linear(1024, 1024, bias=True, dtype=torch.float64)
 
         # Batch normalization
-        self.m = nn.BatchNorm1d(512, dtype=torch.float64)
+        self.m = nn.BatchNorm1d(256, dtype=torch.float64)
 
         # Fourth fully connected layer
-        self.fc4 = nn.Linear(512, len(self.labels), bias=True, dtype=torch.float64)
+        self.fc4 = nn.Linear(256, 2*len(self.labels), bias=True, dtype=torch.float64)
 
         # More batch norm
         self.mm = nn.BatchNorm1d(len(self.labels), dtype=torch.float64)
@@ -86,7 +86,7 @@ class classifierNet(nn.Module):
         x = x.double()
         x = self.fc1(x)                     # ??? -> 1024
         x = F.relu(x)
-        # x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
+        x = F.max_pool1d(x, 2, stride=2)    # 1024 -> 512
 
         # x = self.fc2(x)                     # 512 -> 2048
         # x = F.relu(x)
@@ -100,7 +100,7 @@ class classifierNet(nn.Module):
 
         x = self.fc4(x)                     # 512 -> 32
         x = F.relu(x)
-        # x = F.max_pool1d(x, 2, stride=2)    # 32 -> 16
+        x = F.max_pool1d(x, 2, stride=2)    # 32 -> 16
 
         # x = self.mm(x)
 
@@ -121,7 +121,7 @@ class classifierNet(nn.Module):
 
         # Specify optimizer
         # optimizer = torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9)
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001, eps=1e-08)
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001, eps=1e-08)
 
         # For each batch
         for i, data in enumerate(self.training_loader):
@@ -183,12 +183,12 @@ class classifierNet(nn.Module):
                         temp[numTrueROIs,:] = label["boxes"][j]
 
                         # Extracting ROIs
-                        x1 = abs(math.floor(boxes_[k+j, 0] / 32))
-                        y1 = abs(math.floor(boxes_[k+j, 1] / 32))
-                        x2 = abs(math.ceil(boxes_[k+j, 2]+1 / 32))
-                        y2 = abs(math.ceil(boxes_[k+j, 3]+1 / 32))
-                        img_ = features[k,:,y1:y2,x1:x2]
-                        img_ = (img_ - img_.min())/(img_.max() - img_.min())    # Image normalization
+                        # x1 = abs(math.floor(boxes_[k+j, 0] / 32))
+                        # y1 = abs(math.floor(boxes_[k+j, 1] / 32))
+                        # x2 = abs(math.ceil(boxes_[k+j, 2]+1 / 32))
+                        # y2 = abs(math.ceil(boxes_[k+j, 3]+1 / 32))
+                        # img_ = features[k,:,y1:y2,x1:x2]
+                        # img_ = (img_ - img_.min())/(img_.max() - img_.min())    # Image normalization
                         # imgs_[k+numTrueROIs,:,:,:] = F.interpolate(img_[None,:,:,:], size=(7, 7))
 
                         numTrueROIs = numTrueROIs + 1
@@ -283,7 +283,7 @@ class classifierNet(nn.Module):
 
                     # ROI Pooling
                     k = 0
-                    totalROIs = 0
+                    vtotalROIs = 0
                     for vlabel in vlabels:
 
                         # Number of ROIs in this image
@@ -304,18 +304,18 @@ class classifierNet(nn.Module):
                             if vclass_ != torch.tensor(-1.):
 
                                 # Creating ideal output
-                                vlabels_[totalROIs, int(vclass_)] = 1.0
+                                vlabels_[vtotalROIs, int(vclass_)] = 1.0
 
                                 # Extracting bounding boxes
-                                vboxes_[totalROIs, :] = vlabel["boxes"][j]
+                                vboxes_[vtotalROIs, :] = vlabel["boxes"][j]
                                 vtemp[vnumTrueROIs,:] = vlabel["boxes"][j]
 
                                 # Extracting ROIs
-                                x1 = abs(math.floor(vboxes_[k+j, 0] / 32))
-                                y1 = abs(math.floor(vboxes_[k+j, 1] / 32))
-                                x2 = abs(math.ceil(vboxes_[k+j, 2]+1 / 32))
-                                y2 = abs(math.ceil(vboxes_[k+j, 3]+1 / 32))
-                                vimg_ = vfeatures[k,:,y1:y2,x1:x2]
+                                # x1 = abs(math.floor(vboxes_[k+j, 0] / 32))
+                                # y1 = abs(math.floor(vboxes_[k+j, 1] / 32))
+                                # x2 = abs(math.ceil(vboxes_[k+j, 2]+1 / 32))
+                                # y2 = abs(math.ceil(vboxes_[k+j, 3]+1 / 32))
+                                # vimg_ = vfeatures[k,:,y1:y2,x1:x2]
                                 # vimgs_[k+vnumTrueROIs,:,:,:] = F.interpolate(vimg_[None,:,:,:], size=(7, 7))
 
                                 vnumTrueROIs = vnumTrueROIs + 1
@@ -361,7 +361,7 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
 
     # Object
-    obj = classifierNet(120) # Number of images MUST be a multiple of batch size
+    obj = classifierNet(1000) # Number of images MUST be a multiple of batch size
 
     # Run training
-    obj.runTraining(num_epochs=10)
+    obj.runTraining(num_epochs=1000)
