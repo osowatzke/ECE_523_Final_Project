@@ -129,7 +129,7 @@ class RegionProposalNetwork2(nn.Module):
             anchor_box_sizes, 
             aspect_ratios)
         
-        # print(self.anchor_boxes.shape)
+        print(self.anchor_boxes[:9,:])
 
         # Get dimensions for neural network layers
         in_channels = feature_map_size[-3]
@@ -149,8 +149,8 @@ class RegionProposalNetwork2(nn.Module):
         cls_pred = self.format_cls_pred(cls_pred)
         bbox_offsets = self.format_bbox_offsets(bbox_offsets)
 
-        #print(cls_pred)
-        #print(bbox_offsets)
+        # print(cls_pred)
+        # print(bbox_offsets)
 
         # Get bounding box from offsets
         bbox_pred = bbox_utils.centroids_to_corners(bbox_offsets, self.anchor_boxes)
@@ -159,8 +159,8 @@ class RegionProposalNetwork2(nn.Module):
         cls_pred = cls_pred.reshape(len(feature_maps), -1)
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
-        #print(cls_pred)
-        #print(bbox_pred)
+        # print(cls_pred)
+        print(bbox_pred)
 
         # Get labels 
         cls_truth, bbox_truth = select_closest_anchors(targets, self.anchor_boxes, 0.5, 0.3)
@@ -214,6 +214,8 @@ class RegionProposalNetwork2(nn.Module):
 
         best_boxes = []
         best_scores = []
+        
+        # print(bbox_pred)
 
         for boxes, scores in zip(bbox_pred, cls_pred):
 
@@ -221,14 +223,19 @@ class RegionProposalNetwork2(nn.Module):
             _, idx = scores.topk(pre_nms_top_n)
             boxes, scores = boxes[idx], scores[idx]
 
+            # print(boxes)
+
             scores = torch.sigmoid(scores)
-            
+
             # Clip bounding boxes to image
             boxes = box_ops.clip_boxes_to_image(boxes, self.image_size[-2:])
+            # print(boxes)
 
             # Remove small boxes
             idx = box_ops.remove_small_boxes(boxes, 1e-3)
             boxes, scores = boxes[idx], scores[idx]
+
+            # print(boxes)
 
             # Remove low scoring boxes
             idx = torch.where(scores >= self.min_proposal_score)[0]
@@ -301,13 +308,15 @@ class RegionProposalNetwork2(nn.Module):
 
 def run_network(images, features, targets):
 
-    anchor_box_sizes = (32,64,128),
-    aspect_ratios = (0.5,1.0,2.0),
+    anchor_box_sizes = ((32,64,128),)
+    aspect_ratios = ((0.5, 1.0, 2.0),)
     
-    anchor_box_sizes = (anchor_box_sizes)
-    aspect_ratios = (aspect_ratios,)*len(anchor_box_sizes)
+    #anchor_box_sizes = (anchor_box_sizes,)
+    #aspect_ratios = (aspect_ratios,)*len(anchor_box_sizes)
 
-    anchor_generator = AnchorGenerator() #AnchorGenerator(anchor_box_sizes, aspect_ratios)
+    anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
+    print(len(anchor_generator.cell_anchors))
+    print(anchor_generator.cell_anchors[0].shape)
 
     rpn = RegionProposalNetwork(
         anchor_generator=anchor_generator,
@@ -329,6 +338,11 @@ def run_network(images, features, targets):
     head = RPNHead(2048,9)
     objectness, pred_bbox_deltas = head(features)
     anchors = anchor_generator(images, features)
+    # print(anchors[0].shape)
+    #A = anchors.reshape(3, -1, 3, 4)
+    #A.permute(0,2,1,3)
+    # A = A.reshape(-1,4)
+    # print(A[:9,:])
 
     num_images = len(anchors)
     num_anchors_per_level_shape_tensors = [o[0].shape for o in objectness]
@@ -345,7 +359,6 @@ def run_network(images, features, targets):
     box_coder = det_utils.BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))
     proposals = box_coder.decode(pred_bbox_deltas.detach(), anchors)
     
-    '''
     rel_codes = pred_bbox_deltas.detach()
     boxes = anchors
 
@@ -367,6 +380,12 @@ def run_network(images, features, targets):
     heights = boxes[:, 3] - boxes[:, 1]
     ctr_x = boxes[:, 0] + 0.5 * widths
     ctr_y = boxes[:, 1] + 0.5 * heights
+
+    # print(widths.shape)
+    # print(widths)
+    # print(heights)
+    # print(ctr_x)
+    # print(ctr_y)
 
     wx, wy, ww, wh = (1.0,)*4
     dx = rel_codes[:, 0::4] / wx
@@ -393,13 +412,73 @@ def run_network(images, features, targets):
     pred_boxes3 = pred_ctr_x + c_to_c_w
     pred_boxes4 = pred_ctr_y + c_to_c_h
     pred_boxes = torch.stack((pred_boxes1, pred_boxes2, pred_boxes3, pred_boxes4), dim=2).flatten(1)
-    print(pred_boxes)
-    '''
+    #print(pred_boxes)
+
     proposals = proposals.view(num_images, -1, 4)
-    # print(proposals)
+    print(proposals)
     # print(objectness)
     boxes, scores = rpn.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
     
+    num_images = proposals.shape[0]
+    device = proposals.device
+    # do not backprop through objectness
+    objectness = objectness.detach()
+    objectness = objectness.reshape(num_images, -1)
+
+    levels = [
+        torch.full((n,), idx, dtype=torch.int64, device=device) for idx, n in enumerate(num_anchors_per_level)
+    ]
+    levels = torch.cat(levels, 0)
+    levels = levels.reshape(1, -1).expand_as(objectness)
+
+    # select top_n boxes independently per level before applying nms
+    top_n_idx = rpn._get_top_n_idx(objectness, num_anchors_per_level)
+
+    image_range = torch.arange(num_images, device=device)
+    batch_idx = image_range[:, None]
+
+    # print(proposals)
+
+    objectness = objectness[batch_idx, top_n_idx]
+    levels = levels[batch_idx, top_n_idx]
+    proposals = proposals[batch_idx, top_n_idx]
+
+    objectness_prob = torch.sigmoid(objectness)
+
+    final_boxes = []
+    final_scores = []
+    for boxes, scores, lvl, img_shape in zip(proposals, objectness_prob, levels, images.image_sizes):
+
+        # print(boxes)
+
+        boxes = box_ops.clip_boxes_to_image(boxes, img_shape)
+
+        # print(boxes)
+
+        # remove small boxes
+        keep = box_ops.remove_small_boxes(boxes, rpn.min_size)
+        boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
+
+        # print(boxes)
+
+        # remove low scoring boxes
+        # use >= for Backwards compatibility
+        keep = torch.where(scores >= rpn.score_thresh)[0]
+        boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
+
+        # non-maximum suppression, independently done per level
+        keep = box_ops.batched_nms(boxes, scores, lvl, rpn.nms_thresh)
+
+        # keep only topk scoring predictions
+        keep = keep[: rpn.post_nms_top_n()]
+        boxes, scores = boxes[keep], scores[keep]
+
+        final_boxes.append(boxes)
+        final_scores.append(scores)
+
+    #print(final_boxes)
+    #print(final_scores)
+
     print(boxes)
     print(scores)
 
@@ -501,11 +580,14 @@ if __name__ == "__main__":
     
     # images = ImageList(torch.Tensor(images))
 
-    anchor_box_sizes = (32,64,128),
-    aspect_ratios = (0.5,1.0,2.0),
-    
-    anchor_box_sizes = (anchor_box_sizes)
-    aspect_ratios = (aspect_ratios,)*len(anchor_box_sizes)
+    anchor_box_sizes = ((32,64,128),)
+    aspect_ratios = ((0.5,1.0,2.0),)
+
+    # anchor_box_sizes = (32,64,128),
+    # aspect_ratios = (0.5,1.0,2.0),
+    # 
+    # anchor_box_sizes = (anchor_box_sizes)
+    # aspect_ratios = (aspect_ratios,)*len(anchor_box_sizes)
 
     anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
 
@@ -521,7 +603,7 @@ if __name__ == "__main__":
         pre_nms_top_n ={'training': 512, 'test': 512},
         post_nms_top_n={'training': 128, 'test': 128},
         nms_thresh=0.7,
-        score_thresh=1e-3)
+        score_thresh=0.5)
     
     rpn.train()
 
