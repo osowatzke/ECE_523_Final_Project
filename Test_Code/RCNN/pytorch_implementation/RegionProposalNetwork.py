@@ -152,28 +152,14 @@ class RegionProposalNetwork2(nn.Module):
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
         # Get truth data
-        cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
-
-        # Convert ground truth bounding boxes to ground truth offset
-        bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
+        cls_truth, bbox_off_truth = self.get_ground_truth_data(targets, 0.5, 0.3)        
 
         # Reshape to correct dimensions
         cls_truth      = cls_truth.reshape(len(feature_maps), -1)
         bbox_off_truth = bbox_off_truth.reshape(len(feature_maps), -1, 4)
-
-        # bbox_off_truth = torch.zeros((len(feature_maps),) + bbox_truth[0].shape)
-        # for i, bbox in enumerate(bbox_truth):
-        #     bbox_off_truth[i,:,:] = bbox_utils.corners_to_centroid(bbox, self.anchor_boxes)
-
+        
         bbox_off_pred = bbox_off_pred.reshape(bbox_off_truth.shape)
-        # print(bbox_off_truth)
-        # print(torch.where(cls_truth[0] == 0)[0])
-        # print(bbox_offsets.shape)
-        # print(cls_truth[0].shape)
-        # print(cls_pred[0].shape)
-
-        # savemat(f'meas_i.mat',{'cls_truth':cls_truth,'bbox_off_truth':bbox_off_truth,'bbox_truth':bbox_truth})
-
+        
         bbox_loss, cls_loss = self.get_loss(bbox_off_pred, bbox_off_truth, cls_pred, cls_truth)
 
         # Select best bounding boxes
@@ -249,8 +235,11 @@ class RegionProposalNetwork2(nn.Module):
         # Flatten data
         cls_truth  = cls_truth.ravel()
         bbox_truth = bbox_truth.reshape(-1,4)
-         
-        return cls_truth, bbox_truth
+
+        # Convert ground truth bounding boxes to ground truth offsets
+        bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
+
+        return cls_truth, bbox_off_truth
 
     def get_best_proposals(self, bbox_pred, cls_pred):
 
