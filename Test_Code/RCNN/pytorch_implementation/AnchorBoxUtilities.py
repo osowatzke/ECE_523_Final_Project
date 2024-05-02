@@ -63,12 +63,23 @@ def select_closest_anchors(all_targets, anchor_boxes, max_iou_thresh, min_iou_th
         else:
             iou = box_iou(targets, anchor_boxes) # N x M for N x 4 and M x 4 inputs
             max_val, max_idx = iou.max(dim=0)
-            pos_idx = torch.where(max_val > max_iou_thresh)
+            #print(max_val[1365])
+            #print(max_val[1416])
+            pos_idx = torch.where((max_val >= max_iou_thresh))
             neg_idx = torch.where(max_val < min_iou_thresh)
             labels = torch.full((anchor_boxes.shape[0],), -1)
             labels[pos_idx] = 1
             labels[neg_idx] = 0
+            temp, match_idx = iou.max(dim=1)
+            #print(temp)
+            # THIS IS A BUG
+            match_idx = torch.where(temp[:,None] == iou)[1]
+            #print(temp.shape)
+            #print(match_idx)
+            labels[match_idx] = 1
             ref_boxes = targets[max_idx]
+            #print(torch.where(labels == 1))
+            #print(max_idx[labels == 1])
         all_labels.append(labels)
         all_ref_boxes.append(ref_boxes)
     return all_labels, all_ref_boxes

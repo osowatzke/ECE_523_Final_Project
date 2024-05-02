@@ -129,7 +129,7 @@ class RegionProposalNetwork2(nn.Module):
             anchor_box_sizes, 
             aspect_ratios)
         
-        print(self.anchor_boxes[:9,:])
+        # print(self.anchor_boxes[:9,:])
 
         # Get dimensions for neural network layers
         in_channels = feature_map_size[-3]
@@ -160,11 +160,14 @@ class RegionProposalNetwork2(nn.Module):
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
         # print(cls_pred)
-        print(bbox_pred)
+        # print(bbox_pred)
 
         # Get labels 
         cls_truth, bbox_truth = select_closest_anchors(targets, self.anchor_boxes, 0.5, 0.3)
-        
+
+        #print(cls_truth[0].shape)
+        #print(bbox_truth[0][cls_truth[0] > 0])
+
         # print(len(cls_truth))
         # print(len(bbox_truth))
         bbox_off_truth = torch.zeros((len(feature_maps),) + bbox_truth[0].shape)
@@ -176,8 +179,8 @@ class RegionProposalNetwork2(nn.Module):
         # Select best bounding boxes
         bbox_pred, cls_pred = self.get_best_proposals(bbox_pred, cls_pred)
 
-        print(bbox_pred)
-        print(cls_pred)
+        # print(bbox_pred)
+        # print(cls_pred)
         
         losses = {
             'bbox' : bbox_loss,
@@ -315,8 +318,8 @@ def run_network(images, features, targets):
     #aspect_ratios = (aspect_ratios,)*len(anchor_box_sizes)
 
     anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
-    print(len(anchor_generator.cell_anchors))
-    print(anchor_generator.cell_anchors[0].shape)
+    #print(len(anchor_generator.cell_anchors))
+    #print(anchor_generator.cell_anchors[0].shape)
 
     rpn = RegionProposalNetwork(
         anchor_generator=anchor_generator,
@@ -359,6 +362,7 @@ def run_network(images, features, targets):
     box_coder = det_utils.BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))
     proposals = box_coder.decode(pred_bbox_deltas.detach(), anchors)
     
+    '''
     rel_codes = pred_bbox_deltas.detach()
     boxes = anchors
 
@@ -413,12 +417,13 @@ def run_network(images, features, targets):
     pred_boxes4 = pred_ctr_y + c_to_c_h
     pred_boxes = torch.stack((pred_boxes1, pred_boxes2, pred_boxes3, pred_boxes4), dim=2).flatten(1)
     #print(pred_boxes)
-
+    '''
     proposals = proposals.view(num_images, -1, 4)
-    print(proposals)
+    # print(proposals)
     # print(objectness)
     boxes, scores = rpn.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
     
+    '''
     num_images = proposals.shape[0]
     device = proposals.device
     # do not backprop through objectness
@@ -478,15 +483,60 @@ def run_network(images, features, targets):
 
     #print(final_boxes)
     #print(final_scores)
+    '''
 
-    print(boxes)
-    print(scores)
+    #print(boxes)
+    #print(scores)
 
     losses = {}
     if targets is None:
         raise ValueError("targets should not be None")
     labels, matched_gt_boxes = rpn.assign_targets_to_anchors(anchors, targets)
+
+    labels = []
+    matched_gt_boxes = []
+    for anchors_per_image, targets_per_image in zip(anchors, targets):
+        gt_boxes = targets_per_image["boxes"]
+
+        if gt_boxes.numel() == 0:
+            # Background image (negative example)
+            device = anchors_per_image.device
+            matched_gt_boxes_per_image = torch.zeros(anchors_per_image.shape, dtype=torch.float32, device=device)
+            labels_per_image = torch.zeros((anchors_per_image.shape[0],), dtype=torch.float32, device=device)
+        else:
+            match_quality_matrix = rpn.box_similarity(gt_boxes, anchors_per_image)
+            # print(match_quality_matrix)
+            matched_idxs = rpn.proposal_matcher(match_quality_matrix)
+
+            # print(torch.where(matched_idxs >= 0))
+            # print(matched_idxs[matched_idxs >= 0])
+            # print(matched_idxs[1365])
+            # print(matched_idxs[1413])
+
+            # get the targets corresponding GT for each proposal
+            # NB: need to clamp the indices because we can have a single
+            # GT in the image, and matched_idxs can be -2, which goes
+            # out of bounds
+            matched_gt_boxes_per_image = gt_boxes[matched_idxs.clamp(min=0)]
+
+            labels_per_image = matched_idxs >= 0
+            labels_per_image = labels_per_image.to(dtype=torch.float32)
+
+            # Background (negative examples)
+            bg_indices = matched_idxs == rpn.proposal_matcher.BELOW_LOW_THRESHOLD
+            labels_per_image[bg_indices] = 0.0
+
+            # discard indices that are between thresholds
+            inds_to_discard = matched_idxs == rpn.proposal_matcher.BETWEEN_THRESHOLDS
+            labels_per_image[inds_to_discard] = -1.0
+
+        labels.append(labels_per_image)
+        matched_gt_boxes.append(matched_gt_boxes_per_image)
+
+    # print(matched_gt_boxes[0][labels[0] > 0])
+
     regression_targets = box_coder.encode(matched_gt_boxes, anchors)
+
     loss_objectness, loss_rpn_box_reg = rpn.compute_loss(
         objectness, pred_bbox_deltas, labels, regression_targets
     )
@@ -574,7 +624,9 @@ if __name__ == "__main__":
             losses = sum(loss for loss in loss_dict.values())
             losses.backward()
             optimizer.step()
-        # print(epoch, losses.item())
+        print(epoch, losses.item())
+
+    print()
 
     # torch.save(rpn,'rpn.pth')
     
@@ -607,7 +659,7 @@ if __name__ == "__main__":
     
     rpn.train()
 
-    torch.manual_seed(0)
+    #torch.manual_seed(0)
 
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
@@ -619,8 +671,8 @@ if __name__ == "__main__":
             # print(targets[i].shape)
             # print(feature_maps[i].shape)
             args = [ImageList(images[i],(images[i].shape[-2:],)),{'0':feature_maps[i]},[{'boxes':targets[i]}]]
-            _, loss_dict = run_network(*args)
-            # _, loss_dict = rpn(*args)
+            #_, loss_dict = run_network(*args)
+            _, loss_dict = rpn(*args)
             losses = sum(loss for loss in loss_dict.values())
             losses.backward()
             optimizer.step()

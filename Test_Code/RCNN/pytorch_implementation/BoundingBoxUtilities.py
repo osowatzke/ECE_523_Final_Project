@@ -73,16 +73,16 @@ def centroids_to_corners(offsets, anchor_boxes):
     wa = xmax - xmin
     ha = ymax - ymin
 
-    print(wa)
-    print(ha)
+    #print(wa)
+    #print(ha)
 
     # Get box centers
     xa = xmin + wa/2
     ya = ymin + ha/2
 
-    print(xa)
-    print(ya)
-    
+    #print(xa)
+    #print(ya)
+
     # Determine centers
     x = tx*wa + xa
     y = ty*ha + ya
