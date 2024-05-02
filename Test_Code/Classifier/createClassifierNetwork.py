@@ -21,6 +21,8 @@ IMG_HEIGHT = 7
 IMG_WIDTH = 7
 IMG_CHANNELS = 2048
 
+BATCH_SIZE = 24
+
 BACKBONE_FLAG = True    # True = run data through backbone before classifier
 
 
@@ -64,14 +66,14 @@ class classifierNet(nn.Module):
         sampler = LTD.CustomSampler()
         valid_sampler = LTD.CustomSampler()
         # sampler_indices = np.random.permutation(num_images_in)
-        sampler_indices = range(num_images=num_images_in + num_images_in % 12)
+        sampler_indices = range(int(num_images_in + BATCH_SIZE % num_images_in))
         sampler.indices = sampler_indices
-        valid_sampler.indices = range(num_images_in/100 + (num_images_in/100) % 12)
-        self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=num_images_in + num_images_in % 12, downsample=1, device=None)
-        # self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/10) + int((num_images_in/10)) % 12, downsample=1, device=None)
-        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=num_images_in/100 + (num_images_in/100) % 12, downsample=1, device=None)
-        self.training_loader = torch.utils.data.DataLoader(self.training_set, batch_size=12, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
-        self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=12, collate_fn=LTD.collate_fn, shuffle=False, sampler=valid_sampler)
+        valid_sampler.indices = range(int(num_images_in/1000 + BATCH_SIZE % (num_images_in/1000)))
+        self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=int(num_images_in + BATCH_SIZE % num_images_in), downsample=1, device=None)
+        # self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/10) + int((num_images_in/10)) % BATCH_SIZE, downsample=1, device=None)
+        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/1000 + BATCH_SIZE % (num_images_in/1000)), downsample=1, device=None)
+        self.training_loader = torch.utils.data.DataLoader(self.training_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
+        self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=valid_sampler)
         print('Training set has {} instances'.format(len(self.training_set)))
         print('Validation set has {} instances'.format(len(self.validation_set)))
 
@@ -149,8 +151,8 @@ class classifierNet(nn.Module):
             # Hold all data
             # labels_ = np.empty((numROIs, len(self.labels)))
             labels_ = torch.zeros([numROIs, len(self.labels)]).to(device)
-            labels_db = np.empty((12, len(self.labels))) # DEBUG
-            labels_db[:,3] = 1;
+            labels_db = np.empty((len(labels), len(self.labels))) # DEBUG
+            labels_db[:,3] = 1
             classes_ = torch.zeros([numROIs]).to(device)
             imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH]).to(device)
             boxes_ = torch.zeros([numROIs, 4]).to(device)
@@ -374,7 +376,8 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
 
     # Object
-    obj = classifierNet(1000).cuda() # Number of images MUST be a multiple of batch size
+    obj = classifierNet(10700).cuda()
+    obj.load_state_dict(torch.load("model_20240502_115006_7"))
 
     # Run training
     obj.runTraining(num_epochs=1000)
