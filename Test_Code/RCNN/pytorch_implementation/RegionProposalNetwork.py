@@ -129,27 +129,22 @@ class RegionProposalNetwork2(nn.Module):
 
         # Get dimensions for neural network layers
         in_channels = feature_map_size[-3]
-        num_anchors = len(anchor_box_sizes) * len(aspect_ratios)
+        self.num_anchors = len(anchor_box_sizes) * len(aspect_ratios)
 
         # Create convolutional neural network layers
-        self.conv_layers = self.ConvLayers(in_channels, hidden_layer_channels, num_anchors)
+        self.conv_layers = self.ConvLayers(in_channels, hidden_layer_channels, self.num_anchors)
 
     def forward(self,feature_maps,targets):
 
-        # print(targets)
-
         # Run convolution layers
-        cls_pred, bbox_offsets = self.conv_layers(feature_maps)
+        cls_pred, bbox_off_pred = self.conv_layers(feature_maps)
 
-        # Format output of convolutional layers to form Nx1 and Nx4 matrices
-        cls_pred = self.format_cls_pred(cls_pred)
-        bbox_offsets = self.format_bbox_offsets(bbox_offsets)
-
-        #print(cls_pred.shape)
-        #print(bbox_offsets.shape)
+        # Format output of convolutional layers to form N x 1 and N x 4 matrices
+        cls_pred      = self.format_conv_output(cls_pred)
+        bbox_off_pred = self.format_conv_output(bbox_off_pred)
 
         # Get bounding box from offsets
-        bbox_pred = bbox_utils.centroids_to_corners(bbox_offsets.detach(), self.anchor_boxes)
+        bbox_pred = bbox_utils.centroids_to_corners(bbox_off_pred, self.anchor_boxes)
 
         # Reshape to correct dimensions
         cls_pred = cls_pred.reshape(len(feature_maps), -1)
@@ -172,7 +167,7 @@ class RegionProposalNetwork2(nn.Module):
         for i, bbox in enumerate(bbox_truth):
             bbox_off_truth[i,:,:] = bbox_utils.corners_to_centroid(bbox, self.anchor_boxes)
 
-        bbox_offsets = bbox_offsets.reshape(bbox_off_truth.shape)
+        bbox_off_pred = bbox_off_pred.reshape(bbox_off_truth.shape)
         # print(bbox_off_truth)
         # print(torch.where(cls_truth[0] == 0)[0])
         # print(bbox_offsets.shape)
@@ -181,7 +176,7 @@ class RegionProposalNetwork2(nn.Module):
 
         # savemat(f'meas_i.mat',{'cls_truth':cls_truth,'bbox_off_truth':bbox_off_truth,'bbox_truth':bbox_truth})
 
-        bbox_loss, cls_loss = self.get_loss(bbox_offsets, bbox_off_truth, cls_pred, cls_truth)
+        bbox_loss, cls_loss = self.get_loss(bbox_off_pred, bbox_off_truth, cls_pred, cls_truth)
 
         # Select best bounding boxes
         bbox_pred, cls_pred = self.get_best_proposals(bbox_pred, cls_pred)
@@ -199,18 +194,13 @@ class RegionProposalNetwork2(nn.Module):
         # pprint.pp(bbox_truth[labels == 1])
         #print(labels)
         #print(bbox_truth)
-
-    def format_cls_pred(self, cls_pred):
-        cls_pred = cls_pred.reshape(cls_pred.shape[0:2] + (-1,))
-        cls_pred = cls_pred.permute(0,2,1)
-        cls_pred = cls_pred.reshape(-1,1)
-        return cls_pred
     
-    def format_bbox_offsets(self, bbox_offsets):
-        bbox_offsets = bbox_offsets.reshape(bbox_offsets.shape[0:2] + (-1,))
-        bbox_offsets = bbox_offsets.permute(0,2,1)
-        bbox_offsets = bbox_offsets.reshape(-1,4)
-        return bbox_offsets
+    def format_conv_output(self, x):
+        x = x.reshape(x.shape[0:2] + (-1,))
+        x = x.permute(0,2,1)
+        w = x.shape[2] // self.num_anchors
+        x = x.reshape(-1, w)
+        return x
     
     def get_best_proposals(self, bbox_pred, cls_pred):
 
