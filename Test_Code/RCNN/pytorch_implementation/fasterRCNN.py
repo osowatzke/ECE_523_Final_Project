@@ -25,7 +25,7 @@ def rcnn_collate_fn(data):
 
 class FasterRCNN(nn.Module):
 
-    def __init__(self, image_size, use_built_in_rpn=False):
+    def __init__(self, image_size, use_built_in_rpn=True):
         super().__init__()
         self.backbone = BackboneNetwork()
         self.use_built_in_rpn = use_built_in_rpn
