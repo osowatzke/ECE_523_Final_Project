@@ -12,7 +12,7 @@ from torchvision.models.detection.rpn import det_utils
 import math
 from scipy.io import savemat
 
-from AnchorBoxUtilities import gen_anchor_boxes, select_closest_anchors
+import AnchorBoxUtilities as anchor_utils
 import BoundingBoxUtilities as bbox_utils
 from BackboneNetwork import BackboneNetwork
 
@@ -120,13 +120,11 @@ class RegionProposalNetwork2(nn.Module):
         self.iou_threshold = iou_threshold
 
         # Generate anchor boxes (same for all images)
-        self.anchor_boxes = gen_anchor_boxes(
+        self.anchor_boxes = anchor_utils.gen_anchor_boxes(
             image_size,
             feature_map_size, 
             anchor_box_sizes, 
             aspect_ratios)
-        
-        # print(self.anchor_boxes[:9,:])
 
         # Get dimensions for neural network layers
         in_channels = feature_map_size[-3]
@@ -152,7 +150,10 @@ class RegionProposalNetwork2(nn.Module):
         bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
 
         # Get truth data
-        cls_truth, bbox_off_truth = self.get_ground_truth_data(targets, 0.5, 0.3)        
+        cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
+
+        # Convert ground truth bounding boxes to ground truth offsets
+        bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
 
         # Reshape to correct dimensions
         cls_truth      = cls_truth.reshape(len(feature_maps), -1)
@@ -236,10 +237,7 @@ class RegionProposalNetwork2(nn.Module):
         cls_truth  = cls_truth.ravel()
         bbox_truth = bbox_truth.reshape(-1,4)
 
-        # Convert ground truth bounding boxes to ground truth offsets
-        bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
-
-        return cls_truth, bbox_off_truth
+        return cls_truth, bbox_truth
 
     def get_best_proposals(self, bbox_pred, cls_pred):
 
