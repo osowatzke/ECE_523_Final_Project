@@ -149,7 +149,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
 
     # Create Faster RCNN Network
     print(train_data[0][0].shape)
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 64,
+        batch_size  = 128,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
         device      = device

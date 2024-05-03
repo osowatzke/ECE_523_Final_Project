@@ -43,13 +43,13 @@ class RegionProposalNetwork(nn.Module):
         feature_map_size,
         anchor_box_sizes      = (32,64,128),
         aspect_ratios         = (0.5,1.0,2.0),
-        min_proposal_score    = 0.5,
+        min_proposal_score    = 0.0,
         nms_thresh            = 0.7,
         fg_iou_thresh         = 0.7,
         bg_iou_thresh         = 0.3,
-        max_samp_pre_nms      = 512,
-        max_samp_post_nms     = 256,
-        batch_size            = 128,
+        max_samp_pre_nms      = 1024,
+        max_samp_post_nms     = 512,
+        batch_size            = 256,
         pos_frac              = 0.5):
 
         super().__init__()
@@ -135,8 +135,8 @@ class RegionProposalNetwork(nn.Module):
     def get_ground_truth_data(self, targets, max_iou_thresh, min_iou_thresh):
 
         # Allocate tensors for truth data
-        cls_truth  = torch.zeros((len(targets), self.anchor_boxes.shape[0]), device=self.anchor_boxes.get_device())
-        bbox_truth = torch.zeros((len(targets),) + self.anchor_boxes.shape, device=self.anchor_boxes.get_device())
+        cls_truth  = torch.zeros((len(targets), self.anchor_boxes.shape[0]), device=self.anchor_boxes.device)
+        bbox_truth = torch.zeros((len(targets),) + self.anchor_boxes.shape, device=self.anchor_boxes.device)
 
         # Populate truth data
         for idx in range(len(targets)):
