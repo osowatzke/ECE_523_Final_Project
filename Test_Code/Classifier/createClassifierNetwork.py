@@ -362,8 +362,8 @@ class classifierNet(nn.Module):
             # Track best performance, and save the model's state
             if avg_vloss < best_vloss:
                 best_vloss = avg_vloss
-                model_path = 'model_{}_{}'.format(timestamp, epoch_number)
-                torch.save(self.state_dict(), model_path)
+            model_path = 'model_{}_{}'.format(timestamp, epoch_number)
+            torch.save(self.state_dict(), model_path)
 
             epoch_number += 1
 
@@ -375,7 +375,7 @@ if __name__ == "__main__":
 
     # Object
     obj = classifierNet(10700).cuda()
-    # obj.load_state_dict(torch.load("model_20240502_115006_7"))
+    obj.load_state_dict(torch.load("model_20240502_134909_1"))
 
     # Run training
     obj.runTraining(num_epochs=1000)
