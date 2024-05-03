@@ -20,7 +20,7 @@ def rcnn_collate_fn(data):
         images.append(sample[0])
         targets.append(sample[1])
     images = torch.cat(images)
-    images = images.reshape((len(data),) + data[0].shape)
+    images = images.reshape((len(data),) + data[0][0].shape)
     return images, targets
 
 class FasterRCNN(nn.Module):
@@ -128,11 +128,11 @@ if __name__ == "__main__":
     import random
 
     # Create path constants singleton
-    #data_manager = DataManager()
-    #data_manager.download_datasets()
+    # data_manager = DataManager()
+    # data_manager.download_datasets()
 
-    #data_dir = data_manager.get_download_dir()
-    #PathConstants(data_dir)
+    # data_dir = data_manager.get_download_dir()
+    # PathConstants(data_dir)
     PathConstants('/tmp/FLIR_ADAS_v2')
 
     # Set the initial random number generator seed
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 16,
+        batch_size  = 2,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
         device      = device
