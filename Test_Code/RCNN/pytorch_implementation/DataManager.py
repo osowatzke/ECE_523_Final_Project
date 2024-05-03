@@ -142,9 +142,3 @@ class DataManager:
 if __name__ == "__main__":
     data_manager = DataManager('val')
     data_manager.download_datasets()
-
-# gdown.download('https://drive.google.com/uc?id=1CNcXLTOFKLAxuj81PGdhB0XfuDyOemAu')
-# url = "https://drive.google.com/file/d/1CNcXLTOFKLAxuj81PGdhB0XfuDyOemAu/view?usp=drive_link"
-# url = "https://drive.google.com/uc?export=download&id=1CNcXLTOFKLAxuj81PGdhB0XfuDyOemAu"
-# filename = "images_thermal_val.zip"
-# urlretrieve(url,filename)#,show_progress)
