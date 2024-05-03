@@ -14,6 +14,8 @@ import math
 import os
 import re
 
+torch.autograd.set_detect_anomaly(True)
+
 def collate_fn(data):
     """
        data: is a list of tuples with (example, label, length)
@@ -264,7 +266,7 @@ class NetworkTrainer:
             self.get_epoch_rng_state()
 
             # Loop for each batch
-            for img, targets in data_loader:
+            for args in data_loader:
 
                 # Load the random number generator state if resuming training mid epoch
                 if load_rng_state:
@@ -280,7 +282,7 @@ class NetworkTrainer:
                 self.optimizer.zero_grad()
 
                 # Compute the total loss
-                _, loss_dict = self.model(img, targets)
+                _, loss_dict = self.model(*args)
                 losses = sum(loss for loss in loss_dict.values())
 
                 # Perform backprogation

@@ -41,18 +41,30 @@ class RegionProposalNetwork(nn.Module):
         self, 
         image_size,
         feature_map_size,
-        anchor_box_sizes = (32,64,128),
-        aspect_ratios = (0.5,1.0,2.0),
-        hidden_layer_channels = 2048,
-        min_proposal_score = 0.5,
-        iou_threshold = 0.7):
+        anchor_box_sizes      = (32,64,128),
+        aspect_ratios         = (0.5,1.0,2.0),
+        min_proposal_score    = 0.5,
+        nms_thresh            = 0.7,
+        fg_iou_thresh         = 0.7,
+        bg_iou_thresh         = 0.3,
+        max_samp_pre_nms      = 512,
+        max_samp_post_nms     = 256,
+        batch_size            = 128,
+        pos_frac              = 0.5):
 
         super().__init__()
 
         # Save input arguments as member variables
-        self.image_size = image_size
+        self.image_size         = image_size
         self.min_proposal_score = min_proposal_score
-        self.iou_threshold = iou_threshold
+        self.nms_thresh         = nms_thresh
+        self.fg_iou_thresh      = fg_iou_thresh
+        self.bg_iou_thresh      = bg_iou_thresh
+        self.max_samp_pre_nms   = max_samp_pre_nms
+        self.max_samp_post_nms  = max_samp_post_nms
+        self.batch_size         = batch_size
+        self.pos_frac           = pos_frac
+        self.min_size           = 1e-3
 
         # Generate anchor boxes (same for all images)
         self.anchor_boxes = anchor_utils.gen_anchor_boxes(
@@ -66,7 +78,7 @@ class RegionProposalNetwork(nn.Module):
         self.num_anchors = len(anchor_box_sizes) * len(aspect_ratios)
 
         # Create convolutional neural network layers
-        self.conv_layers = self.ConvLayers(in_channels, hidden_layer_channels, self.num_anchors)
+        self.conv_layers = self.ConvLayers(in_channels, in_channels, self.num_anchors)
 
     def forward(self,feature_maps,targets=None):
 
@@ -78,7 +90,7 @@ class RegionProposalNetwork(nn.Module):
         bbox_off_pred = self.format_conv_output(bbox_off_pred)
 
         # Get bounding box from offsets
-        bbox_pred = bbox_utils.centroids_to_corners(bbox_off_pred, self.anchor_boxes)
+        bbox_pred = bbox_utils.centroids_to_corners(bbox_off_pred.detach(), self.anchor_boxes)
 
         # Select best bounding boxes
         bbox_pred = self.get_best_proposals(bbox_pred, cls_pred)[0]
@@ -87,7 +99,7 @@ class RegionProposalNetwork(nn.Module):
         if self.training:
 
             # Get truth data
-            cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
+            cls_truth, bbox_truth = self.get_ground_truth_data(targets, self.fg_iou_thresh, self.bg_iou_thresh)
 
             # Convert ground truth bounding boxes to ground truth offsets
             bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
@@ -157,7 +169,7 @@ class RegionProposalNetwork(nn.Module):
                 max_val, max_idx = iou.max(dim=1)
 
                 # THIS IS A BUG!!!!!!!!!
-                max_idx = torch.where(max_val[:,None] == iou)[1]
+                # max_idx = torch.where(max_val[:,None] == iou)[1]
 
                 # Ensure each object has at least one bounding box
                 cls_truth[idx, max_idx] = 1
@@ -170,15 +182,14 @@ class RegionProposalNetwork(nn.Module):
 
     def get_best_proposals(self, bbox_pred, cls_pred):
 
-        pre_nms_top_n = 512
-        post_nms_top_n = 128
-
         # Empty list for boxes and scores for batch
         best_boxes = []
         best_scores = []
 
         # Compute the total number of anchor boxes
         total_num_anchors = self.anchor_boxes.shape[0]
+
+        cls_pred = cls_pred.detach()
 
         # Reshape the predictions to easily separate data from each image
         cls_pred = cls_pred.reshape(-1, total_num_anchors) 
@@ -194,7 +205,7 @@ class RegionProposalNetwork(nn.Module):
             scores, boxes = cls_pred[img], bbox_pred[img]
 
             # Get N boxes with highest score before non-max suppression
-            _, idx = scores.topk(pre_nms_top_n)
+            _, idx = scores.topk(self.max_samp_pre_nms)
             boxes, scores = boxes[idx], scores[idx]
 
             # Make the score probability-like by passing through a sigmoid function
@@ -204,7 +215,7 @@ class RegionProposalNetwork(nn.Module):
             boxes = box_ops.clip_boxes_to_image(boxes, self.image_size[-2:])
 
             # Remove small boxes
-            idx = box_ops.remove_small_boxes(boxes, 1e-3)
+            idx = box_ops.remove_small_boxes(boxes, self.min_size)
             boxes, scores = boxes[idx], scores[idx]
 
             # Remove low scoring boxes
@@ -212,10 +223,10 @@ class RegionProposalNetwork(nn.Module):
             boxes, scores = boxes[idx], scores[idx]
 
             # Perform non-maximum suppression
-            idx = box_ops.nms(boxes, scores, self.iou_threshold)
+            idx = box_ops.nms(boxes, scores, self.nms_thresh)
 
             # Keep only N top scoring predictions
-            idx = idx[:post_nms_top_n]
+            idx = idx[:self.max_samp_post_nms]
             boxes, scores = boxes[idx], scores[idx]
 
             # Save boxes and scores from this batch
@@ -230,7 +241,7 @@ class RegionProposalNetwork(nn.Module):
         total_num_anchors = self.anchor_boxes.shape[0]
 
         # Sample positive and negative samples from each image
-        pos_samp, neg_samp = sample_utils.sample_data(cls_truth, total_num_anchors, 128, 0.5)
+        pos_samp, neg_samp = sample_utils.sample_data(cls_truth, total_num_anchors, self.batch_size, self.pos_frac)
 
         # Create tensor with all samples
         all_samp = torch.cat([pos_samp, neg_samp])
