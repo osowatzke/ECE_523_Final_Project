@@ -47,5 +47,9 @@ def sample_data(all_labels, num_anchors, batch_size, pos_frac):
     # Create tensors using list data
     pos_samp = torch.cat(pos_samp)
     neg_samp = torch.cat(neg_samp)
-    
+
+    # Sort samples to match pytorch implementation
+    pos_samp = pos_samp.sort()[0]
+    neg_samp = neg_samp.sort()[0]
+
     return pos_samp, neg_samp
