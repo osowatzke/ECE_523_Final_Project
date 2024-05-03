@@ -53,7 +53,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create Dataset Object
-dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images = 10)
+dataset = FlirDataset(PathConstants.TRAIN_DIR) #, num_images = 10)
 rpn_dataset = CustomDataset()
 
 # Run images through backbone network
@@ -72,7 +72,7 @@ torch.manual_seed(0)
 
 rpn = RegionProposalNetwork(dataset[0][0].shape, rpn_dataset[0][0].shape)
 
-if False:
+if True:
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
     network_trainer = NetworkTrainer(
@@ -151,7 +151,7 @@ if True:
         model      = roi_heads,
         optimizer  = optimizer,
         num_epochs = 10,
-        batch_size = 1,
+        batch_size = 8,
         collate_fn = roi_collate_fn)
 
     network_trainer.train()
