@@ -95,6 +95,9 @@ class RegionProposalNetwork(nn.Module):
         # Select best bounding boxes
         bbox_pred = self.get_best_proposals(bbox_pred, cls_pred)[0]
 
+        # Default value for loss
+        losses = {}
+
         # Only compute loss when training
         if self.training:
 
@@ -112,10 +115,7 @@ class RegionProposalNetwork(nn.Module):
                 'cls'  : cls_loss
             }
 
-            return bbox_pred, losses
-        
-        else:
-            return bbox_pred
+        return bbox_pred, losses
     
     # Function packs the output of a convolution neural network into an N x M array
     def format_conv_output(self, x):
@@ -401,7 +401,7 @@ if __name__ == "__main__":
             # Format arguments for built-in region proposal network
             batch_images = torch.cat(batch_images)
             num_images = (e - s)
-            image_sizes  = (images[i].shape[-2:],) * num_images
+            image_sizes  = (images[0].shape[-2:],) * num_images
             batch_images = ImageList(batch_images, image_sizes)
             batch_features = {'0' : torch.cat(batch_features)}
         
