@@ -310,6 +310,7 @@ class NetworkTrainer:
             epoch_count += 1
 
         # Save data from the end of the final epoch
+        self.epoch = self.num_epochs
         self.save_state()
 
         # Clear any pending events

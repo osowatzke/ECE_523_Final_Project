@@ -111,14 +111,14 @@ rpn_head = torch_rpn.RPNHead(rpn_dataset[0][1].shape[1],9)
 rpn = torch_rpn.RegionProposalNetwork(
     anchor_generator=anchor_generator,
     head=rpn_head,
-    fg_iou_thresh=0.5,
+    fg_iou_thresh=0.7,
     bg_iou_thresh=0.3,
     batch_size_per_image=128,
     positive_fraction=0.5,
     pre_nms_top_n ={'training': 512, 'testing': 512},
     post_nms_top_n={'training': 128, 'testing': 128},
     nms_thresh=0.7,
-    score_thresh=0.5)
+    score_thresh=0.0)
 
 rpn.train()
     
