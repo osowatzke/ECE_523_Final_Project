@@ -99,7 +99,7 @@ class FasterRCNN(nn.Module):
             nms_thresh           = 0.5,
             detections_per_img   = 100)
 
-    def to(self,device)
+    def to(self,device):
         super().to(device)
         self.rpn.to(device)
 
