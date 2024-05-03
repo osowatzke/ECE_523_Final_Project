@@ -25,7 +25,7 @@ def rcnn_collate_fn(data):
 
 class FasterRCNN(nn.Module):
 
-    def __init__(self, image_size, use_built_in_rpn=True):
+    def __init__(self, image_size, use_built_in_rpn=False):
         super().__init__()
         self.backbone = BackboneNetwork()
         self.use_built_in_rpn = use_built_in_rpn
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=10, device=device)
 
     # Create Faster RCNN Network
     print(train_data[0][0].shape)
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     model.to(device)
 
     # Create optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
     
     # Set the period for saving data
     # -1 will cause data not to be saved
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 32,
+        batch_size  = 64,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
         device      = device

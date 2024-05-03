@@ -80,6 +80,10 @@ class RegionProposalNetwork(nn.Module):
         # Create convolutional neural network layers
         self.conv_layers = self.ConvLayers(in_channels, in_channels, self.num_anchors)
 
+    def to(self,device):
+        super().to(device)
+        self.anchor_boxes.to(device)
+        
     def forward(self,feature_maps,targets=None):
 
         # Run convolution layers
