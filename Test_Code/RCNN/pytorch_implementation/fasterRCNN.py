@@ -128,12 +128,12 @@ if __name__ == "__main__":
     import random
 
     # Create path constants singleton
-    # data_manager = DataManager()
-    # data_manager.download_datasets()
+    data_manager = DataManager()
+    data_manager.download_datasets()
 
-    # data_dir = data_manager.get_download_dir()
-    # PathConstants(data_dir)
-    PathConstants('/tmp/FLIR_ADAS_v2')
+    data_dir = data_manager.get_download_dir()
+    PathConstants(data_dir)
+    #PathConstants('/tmp/FLIR_ADAS_v2')
 
     # Set the initial random number generator seed
     torch.manual_seed(0)
