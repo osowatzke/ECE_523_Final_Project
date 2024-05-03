@@ -10,51 +10,14 @@ import torch
 from torchvision.models.detection.rpn import RPNHead, concat_box_prediction_layers
 from torchvision.models.detection.rpn import det_utils
 import math
-from scipy.io import savemat
 
 import AnchorBoxUtilities   as anchor_utils
 import BoundingBoxUtilities as bbox_utils
 import SamplingUtilities    as sample_utils
 
 from BackboneNetwork import BackboneNetwork
-
-from PathConstants import PathConstants
-from FlirDataset import FlirDataset
-
-import pprint
-# Run RPN head
-#   scores
-#   boxDeltas
-
-# Generate Anchor Boxes
-
-# Convert boxDeltas into proposals
-#   Solve for x, y, w, and h
-#     tx = (x - xa)/wa
-#     ty = (y - ya)/ha
-#     tw = log(w/wa)
-#     th = log(h/ha)
-
-# Filter proposals
-#   Select top N boxes
-#   Convert scores to probabilties
-#   Clip boxes to image
-#   Remove small boxes
-#   Remove low scoring boxes
-#   Non-max suppression
-#   Keep only top N proposals
-
-# Assign targets to nearest anchors
-
-# Encode regression targets
-#   Solve for tx, ty, tw, and th for each proposal
-
-# Compute loss
-#   box_loss = smooth_l1_loss (computed on positive indices only)
-#   objectness_loss = binary_cross_entropy_width_logits (on all samples)
-
-
-
+from PathConstants   import PathConstants
+from FlirDataset     import FlirDataset
 
 class RegionProposalNetwork2(nn.Module):
 
@@ -158,7 +121,10 @@ class RegionProposalNetwork2(nn.Module):
         x = x.reshape(x.shape[0:2] + (-1,))
         x = x.permute(0,2,1)
         w = x.shape[2] // self.num_anchors
-        x = x.reshape(-1, w)
+        if w == 1:
+            x = x.ravel()
+        else:
+            x = x.reshape(-1, w)
         return x
     
     def get_ground_truth_data(self, targets, max_iou_thresh, min_iou_thresh):
@@ -268,44 +234,19 @@ class RegionProposalNetwork2(nn.Module):
             best_scores.append(scores)
 
         return best_boxes, best_scores
-
-    def get_top_n_idx(self, scores, n):
-        top_n_idx = []
-        n = min(scores.shape[1], n)
-        for score in scores.split(scores, 1):
-            _, idx = score.topk(n, dim=1)
-            top_n_idx.append(idx)
-        return top_n_idx
-
+    
     def compute_loss(self, bbox_off_pred, bbox_off_truth, cls_pred, cls_truth):
         
         # Compute the total number of anchor boxes
         total_num_anchors = self.anchor_boxes.shape[0]
 
-        # Reshape the data so it can easily be separated on image boundaries
-        cls_pred       = cls_pred.reshape(-1, total_num_anchors)
-        cls_truth      = cls_truth.reshape(-1, total_num_anchors)
-        bbox_off_truth = bbox_off_truth.reshape(-1, total_num_anchors, 4)
-        bbox_off_pred  = bbox_off_pred.reshape(-1, total_num_anchors, 4)
-
         # Sample positive and negative samples from each image
-        pos_samp, neg_samp = sample_utils.sample_data(cls_truth, 128, 0.5)
+        pos_samp, neg_samp = sample_utils.sample_data(cls_truth, total_num_anchors, 128, 0.5)
 
-        for idx in range(len(pos_samp)):
-            pos_samp[idx] = pos_samp[idx] + bbox_off_pred.shape[1] * idx
-            neg_samp[idx] = neg_samp[idx] + bbox_off_pred.shape[1] * idx
-
-        pos_samp = torch.cat(pos_samp).sort()[0]
-        neg_samp = torch.cat(neg_samp).sort()[0]
-
+        # Create tensor with all samples
         all_samp = torch.cat([pos_samp, neg_samp])
 
-        bbox_off_pred = bbox_off_pred.reshape(-1,4)
-        bbox_off_truth = bbox_off_truth.reshape(-1,4)
-
-        cls_pred = cls_pred.ravel()
-        cls_truth = cls_truth.ravel()
-
+        # Determine the bounding box loss
         bbox_loss = F.smooth_l1_loss(
             bbox_off_pred[pos_samp],
             bbox_off_truth[pos_samp],
@@ -313,6 +254,7 @@ class RegionProposalNetwork2(nn.Module):
             reduction="sum",
         ) / (all_samp.numel())
 
+        # Determine the classifier loss
         cls_loss = F.binary_cross_entropy_with_logits(cls_pred[all_samp], cls_truth[all_samp].type(torch.float))
 
         return bbox_loss, cls_loss
