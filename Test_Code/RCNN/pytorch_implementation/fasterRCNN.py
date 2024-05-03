@@ -99,6 +99,10 @@ class FasterRCNN(nn.Module):
             nms_thresh           = 0.5,
             detections_per_img   = 100)
 
+    def to(self,device)
+        super().to(device)
+        self.rpn.to(device)
+
     def forward(self, images, targets=None):
         feature_maps = self.backbone(images)
         image_sizes = (self.image_size[-2:],) * images.shape[0]

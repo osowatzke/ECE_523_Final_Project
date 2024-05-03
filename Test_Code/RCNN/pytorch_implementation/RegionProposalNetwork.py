@@ -83,7 +83,7 @@ class RegionProposalNetwork(nn.Module):
     def to(self,device):
         super().to(device)
         self.anchor_boxes.to(device)
-        
+
     def forward(self,feature_maps,targets=None):
 
         # Run convolution layers
@@ -135,8 +135,8 @@ class RegionProposalNetwork(nn.Module):
     def get_ground_truth_data(self, targets, max_iou_thresh, min_iou_thresh):
 
         # Allocate tensors for truth data
-        cls_truth  = torch.zeros((len(targets), self.anchor_boxes.shape[0]))
-        bbox_truth = torch.zeros((len(targets),) + self.anchor_boxes.shape)
+        cls_truth  = torch.zeros((len(targets), self.anchor_boxes.shape[0]), device=self.anchor_boxes.get_device())
+        bbox_truth = torch.zeros((len(targets),) + self.anchor_boxes.shape, device=self.anchor_boxes.get_device())
 
         # Populate truth data
         for idx in range(len(targets)):
