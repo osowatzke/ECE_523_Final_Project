@@ -12,8 +12,10 @@ from torchvision.models.detection.rpn import det_utils
 import math
 from scipy.io import savemat
 
-import AnchorBoxUtilities as anchor_utils
+import AnchorBoxUtilities   as anchor_utils
 import BoundingBoxUtilities as bbox_utils
+import SamplingUtilities    as sample_utils
+
 from BackboneNetwork import BackboneNetwork
 
 from PathConstants import PathConstants
@@ -51,26 +53,7 @@ import pprint
 #   box_loss = smooth_l1_loss (computed on positive indices only)
 #   objectness_loss = binary_cross_entropy_width_logits (on all samples)
 
-def sample_pred(all_labels, batch_size, pos_frac):
-    pos_samp = []
-    neg_samp = []
-    for labels in all_labels:
-        pos_idx = torch.where(labels == 1)[0]
-        # print(pos_idx)
-        neg_idx = torch.where(labels == 0)[0]
-        # savemat(f'meas{i}.mat', {'pos':pos_idx, 'neg':neg_idx})
-        # print(neg_idx[1000:1010])
-        max_pos = batch_size*pos_frac
-        num_pos = min(pos_idx.numel(), max_pos)
-        num_neg = batch_size - num_pos
-        rand_idx = torch.randperm(pos_idx.numel())
-        pos_idx = pos_idx[rand_idx]
-        # print(pos_idx)
-        rand_idx = torch.randperm(neg_idx.numel())
-        neg_idx = neg_idx[rand_idx]
-        pos_samp.append(pos_idx[:num_pos])
-        neg_samp.append(neg_idx[:num_neg])
-    return pos_samp, neg_samp
+
 
 
 class RegionProposalNetwork2(nn.Module):
@@ -133,7 +116,7 @@ class RegionProposalNetwork2(nn.Module):
         # Create convolutional neural network layers
         self.conv_layers = self.ConvLayers(in_channels, hidden_layer_channels, self.num_anchors)
 
-    def forward(self,feature_maps,targets):
+    def forward(self,feature_maps,targets=None):
 
         # Run convolution layers
         cls_pred, bbox_off_pred = self.conv_layers(feature_maps)
@@ -145,41 +128,32 @@ class RegionProposalNetwork2(nn.Module):
         # Get bounding box from offsets
         bbox_pred = bbox_utils.centroids_to_corners(bbox_off_pred, self.anchor_boxes)
 
-        # Reshape to correct dimensions
-        cls_pred  = cls_pred.reshape(len(feature_maps), -1)
-        bbox_pred = bbox_pred.reshape(len(feature_maps), -1, 4)
-
-        # Get truth data
-        cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
-
-        # Convert ground truth bounding boxes to ground truth offsets
-        bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
-
-        # Reshape to correct dimensions
-        cls_truth      = cls_truth.reshape(len(feature_maps), -1)
-        bbox_off_truth = bbox_off_truth.reshape(len(feature_maps), -1, 4)
-        
-        bbox_off_pred = bbox_off_pred.reshape(bbox_off_truth.shape)
-        
-        bbox_loss, cls_loss = self.get_loss(bbox_off_pred, bbox_off_truth, cls_pred, cls_truth)
-
         # Select best bounding boxes
-        bbox_pred, cls_pred = self.get_best_proposals(bbox_pred, cls_pred)
+        bbox_pred = self.get_best_proposals(bbox_pred, cls_pred)[0]
 
-        # print(bbox_pred)
-        # print(cls_pred)
+        # Only compute loss when training
+        if self.training:
+
+            # Get truth data
+            cls_truth, bbox_truth = self.get_ground_truth_data(targets, 0.5, 0.3)
+
+            # Convert ground truth bounding boxes to ground truth offsets
+            bbox_off_truth = bbox_utils.corners_to_centroid(bbox_truth, self.anchor_boxes)
+            
+            # Function computes the loss
+            bbox_loss, cls_loss = self.compute_loss(bbox_off_pred, bbox_off_truth, cls_pred, cls_truth)
+            
+            losses = {
+                'bbox' : bbox_loss,
+                'cls'  : cls_loss
+            }
+
+            return bbox_pred, losses
         
-        losses = {
-            'bbox' : bbox_loss,
-            'cls'  : cls_loss
-        }
-
-        return bbox_pred, losses
-        # pprint.pp(labels)
-        # pprint.pp(bbox_truth[labels == 1])
-        #print(labels)
-        #print(bbox_truth)
+        else:
+            return bbox_pred
     
+    # Function packs the output of a convolution neural network into an N x M array
     def format_conv_output(self, x):
         x = x.reshape(x.shape[0:2] + (-1,))
         x = x.permute(0,2,1)
@@ -244,30 +218,39 @@ class RegionProposalNetwork2(nn.Module):
         pre_nms_top_n = 512
         post_nms_top_n = 128
 
+        # Empty list for boxes and scores for batch
         best_boxes = []
         best_scores = []
-        
-        # print(bbox_pred)
 
-        for boxes, scores in zip(bbox_pred, cls_pred):
+        # Compute the total number of anchor boxes
+        total_num_anchors = self.anchor_boxes.shape[0]
+
+        # Reshape the predictions to easily separate data from each image
+        cls_pred = cls_pred.reshape(-1, total_num_anchors) 
+        bbox_pred = bbox_pred.reshape(-1, total_num_anchors, 4)
+        
+        # Determine the number of images in the batch
+        num_images = cls_pred.shape[0]
+
+        # Loop for each image
+        for img in range(num_images):
+
+            # Extract predictions for current image
+            scores, boxes = cls_pred[img], bbox_pred[img]
 
             # Get N boxes with highest score before non-max suppression
             _, idx = scores.topk(pre_nms_top_n)
             boxes, scores = boxes[idx], scores[idx]
 
-            # print(boxes)
-
+            # Make the score probability-like by passing through a sigmoid function
             scores = torch.sigmoid(scores)
 
             # Clip bounding boxes to image
             boxes = box_ops.clip_boxes_to_image(boxes, self.image_size[-2:])
-            # print(boxes)
 
             # Remove small boxes
             idx = box_ops.remove_small_boxes(boxes, 1e-3)
             boxes, scores = boxes[idx], scores[idx]
-
-            # print(boxes)
 
             # Remove low scoring boxes
             idx = torch.where(scores >= self.min_proposal_score)[0]
@@ -280,6 +263,7 @@ class RegionProposalNetwork2(nn.Module):
             idx = idx[:post_nms_top_n]
             boxes, scores = boxes[idx], scores[idx]
 
+            # Save boxes and scores from this batch
             best_boxes.append(boxes)
             best_scores.append(scores)
 
@@ -293,18 +277,19 @@ class RegionProposalNetwork2(nn.Module):
             top_n_idx.append(idx)
         return top_n_idx
 
-    def get_loss(self, bbox_off_pred, bbox_off_truth, cls_pred, cls_truth):
+    def compute_loss(self, bbox_off_pred, bbox_off_truth, cls_pred, cls_truth):
         
-        # print(bbox_off_pred.shape)
-        # print(bbox_off_truth.shape)
-        # print(cls_pred.shape)
-        # print(cls_truth.shape)
+        # Compute the total number of anchor boxes
+        total_num_anchors = self.anchor_boxes.shape[0]
 
-        pos_samp, neg_samp = sample_pred(cls_truth, 128, 0.5)
+        # Reshape the data so it can easily be separated on image boundaries
+        cls_pred       = cls_pred.reshape(-1, total_num_anchors)
+        cls_truth      = cls_truth.reshape(-1, total_num_anchors)
+        bbox_off_truth = bbox_off_truth.reshape(-1, total_num_anchors, 4)
+        bbox_off_pred  = bbox_off_pred.reshape(-1, total_num_anchors, 4)
 
-        # print(neg_samp[0].sort()[0])
-
-        #print(pos_samp)
+        # Sample positive and negative samples from each image
+        pos_samp, neg_samp = sample_utils.sample_data(cls_truth, 128, 0.5)
 
         for idx in range(len(pos_samp)):
             pos_samp[idx] = pos_samp[idx] + bbox_off_pred.shape[1] * idx
@@ -313,28 +298,13 @@ class RegionProposalNetwork2(nn.Module):
         pos_samp = torch.cat(pos_samp).sort()[0]
         neg_samp = torch.cat(neg_samp).sort()[0]
 
-        # print(pos_samp)
-
-        # savemat(f'meas.mat',{'pos_idx':pos_samp,'neg_idx':neg_samp})
-
-        # print(pos_samp.shape)
-        # print(pos_samp)
-        # print(neg_samp.shape)
-        # print(neg_samp)
-
-        # print(pos_samp.shape)
-        # print(neg_samp.shape)
         all_samp = torch.cat([pos_samp, neg_samp])
 
         bbox_off_pred = bbox_off_pred.reshape(-1,4)
         bbox_off_truth = bbox_off_truth.reshape(-1,4)
 
-        # print(bbox_off_pred)
-        # print(bbox_off_truth)
-
-        # cls_pred = torch.cat(cls_pred)
         cls_pred = cls_pred.ravel()
-        cls_truth = cls_truth.ravel() #torch.cat(cls_truth)
+        cls_truth = cls_truth.ravel()
 
         bbox_loss = F.smooth_l1_loss(
             bbox_off_pred[pos_samp],
@@ -343,25 +313,9 @@ class RegionProposalNetwork2(nn.Module):
             reduction="sum",
         ) / (all_samp.numel())
 
-        # print(cls_pred[0].shape)
-        # print(cls_truth[0].shape)
         cls_loss = F.binary_cross_entropy_with_logits(cls_pred[all_samp], cls_truth[all_samp].type(torch.float))
 
         return bbox_loss, cls_loss
-        # (N, C, _, _) = cls_pred.shape
-        # cls_pred = cls_pred.reshape(N, C, -1)
-        # cls_pred = cls_pred.permute(0, 2, 1)
-        # cls_pred = cls_pred.reshape(N, -1, 1)
-        # return cls_pred
-    
-    # def format_bbox_offsets(self, bbox_offsets):
-    #     bbox_offsets = torch.stack(bbox_offsets)
-    #     (N, C, _, _) = bbox_offsets.shape
-    #     bbox_offsets = bbox_offsets.reshape(N, C, -1)
-    #     bbox_offsets = bbox_offsets.permute(0, 2, 1)
-    #     bbox_offsets = bbox_offsets.reshape(N, -1, 4)
-    #     return bbox_offsets
-
 
 def run_network(rpn, images, features, targets):
 
