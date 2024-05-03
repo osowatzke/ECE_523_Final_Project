@@ -20,7 +20,7 @@ def rcnn_collate_fn(data):
         images.append(sample[0])
         targets.append(sample[1])
     images = torch.cat(images)
-    images = images.reshape((len(data),) + images.shape)
+    images = images.reshape((len(data),) + data[0].shape)
     return images, targets
 
 class FasterRCNN(nn.Module):
