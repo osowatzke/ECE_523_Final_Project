@@ -82,7 +82,7 @@ class RegionProposalNetwork(nn.Module):
 
     def to(self,device):
         super().to(device)
-        self.anchor_boxes.to(device)
+        self.anchor_boxes = self.anchor_boxes.to(device)
 
     def forward(self,feature_maps,targets=None):
 
