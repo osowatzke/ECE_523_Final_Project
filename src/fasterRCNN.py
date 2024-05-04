@@ -130,10 +130,9 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
 
     # Create Faster RCNN Network
-    print(train_data[0][0].shape)
     model = FasterRCNN(train_data[0][0].shape)
     model.to(device)
 
