@@ -14,9 +14,10 @@ import numpy as np
 from ClassConstants import ClassConstants
 import math
 from torchvision.models.detection.roi_heads import fastrcnn_loss
+from BoundingBoxUtilities import corners_to_centroid, centroids_to_corners
 
-device = torch.device('cuda')
-torch.cuda.set_device(0)
+device = torch.device('cpu')
+# torch.cuda.set_device(0)
 
 IMG_HEIGHT = 7
 IMG_WIDTH = 7
@@ -76,13 +77,8 @@ class classifierNet(nn.Module):
         print('Training set has {} instances'.format(len(self.training_set)))
         print('Validation set has {} instances'.format(len(self.validation_set)))
 
-        # Not sure what this does
-        self.transform = transforms.Compose(
-            [transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))])
 
-
-    def forward(self, x):
+    def forward(self, x, labels, regression_targets):
 
         # Pass input through layers, with relu and max pooling nonlinearities
         # x = x.double()
@@ -105,31 +101,25 @@ class classifierNet(nn.Module):
         # Softmax
         # output = F.log_softmax(x, dim=1)
         # output = self.softmax(x)
-        
-        return c, r
-    
 
-    def lossFunction(self, class_logits, box_regression, labels, regression_targets):
+        # Losses
+        labels = labels.type(torch.LongTensor).to(device)
+        classification_loss = F.cross_entropy(c, labels)
 
-        classification_loss = F.cross_entropy(class_logits, labels)
-
-        # get indices that correspond to the regression targets for
-        # the corresponding ground truth labels, to be used with
-        # advanced indexing
         sampled_pos_inds_subset = torch.where(labels > 0)[0]
         labels_pos = labels[sampled_pos_inds_subset]
-        N, num_classes = class_logits.shape
-        box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
+        N, num_classes = c.shape
+        r = r.reshape(N, r.size(-1) // 4, 4)
 
         box_loss = F.smooth_l1_loss(
-            box_regression[sampled_pos_inds_subset, labels_pos],
+            r[sampled_pos_inds_subset, labels_pos],
             regression_targets[sampled_pos_inds_subset],
             beta=1 / 9,
             reduction="sum",
         )
         box_loss = box_loss / labels.numel()
-
-        return classification_loss, box_loss
+        
+        return c, r, classification_loss, box_loss
     
 
     def trainOneEpoch(self, epoch_index, tb_writer, backbone=None):
@@ -149,16 +139,16 @@ class classifierNet(nn.Module):
             optimizer.zero_grad()
            
             # Run network
-            outputs, classes_, labels_, boxes_ = self.runNetwork(data, backbone)
+            outputs, classes_, boxes_ = self.runNetwork(data, backbone)
 
             # Calculate loss and gradients
-            classes_ = classes_.type(torch.LongTensor).to(device)
-            loss_tuple = self.lossFunction(outputs[0], outputs[1], classes_, boxes_)
-            total_loss = loss_tuple[0] # total_loss = sum(loss for loss in loss_tuple)
+            # classes_ = classes_.type(torch.LongTensor).to(device)
+            loss_tuple = (outputs[2], outputs[3])
+            total_loss = sum(loss for loss in loss_tuple)
             total_loss.backward()
 
             # Clip gradient
-            torch.nn.utils.clip_grad_norm_(self.parameters(), 5)
+            # torch.nn.utils.clip_grad_norm_(self.parameters(), 5)
             
             # Adjust weights
             optimizer.step()
@@ -173,6 +163,11 @@ class classifierNet(nn.Module):
                 running_loss = 0
             
         return running_loss / i
+    
+
+    def trainWithOneBatchFromRPN():
+        pass
+
     
 
     def runTraining(self, num_epochs=5):
@@ -206,8 +201,8 @@ class classifierNet(nn.Module):
                     voutputs, vclasses_, vlabels_, vboxes_ = self.runNetwork(vdata, backbone)
 
                     # Calculate loss and gradients
-                    vclasses_ = vclasses_.type(torch.LongTensor).to(device)
-                    vloss_tuple = self.lossFunction(voutputs[0], voutputs[1], vclasses_, vboxes_)
+                    # vclasses_ = vclasses_.type(torch.LongTensor).to(device)
+                    vloss_tuple = (voutputs[2], voutputs[3])
                     vloss = sum(loss for loss in vloss_tuple)
                     running_vloss += vloss
 
@@ -300,10 +295,9 @@ class classifierNet(nn.Module):
             features = torch.flatten(imgs_pyt, start_dim = 1)
 
             # Run batch through network
-            outputs = self(features)
+            outputs = self(features, classes_, boxes_)
 
-            return outputs, classes_, labels_, boxes_
-
+            return outputs, classes_, boxes_
 
     def testClassifier(self):
 
@@ -318,7 +312,7 @@ class classifierNet(nn.Module):
             # For each batch
             for i, tdata in enumerate(self.validation_loader):
 
-                toutputs, tclasses_, tlabels_, tboxes_ = self.runNetwork(tdata, backbone)
+                toutputs, tclasses_, tboxes_ = self.runNetwork(tdata, backbone)
 
                 # Determine predicted classes
                 predOutputs = torch.zeros([toutputs[0].size(dim=0)]).to(device)
@@ -336,18 +330,19 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
 
     # Object
-    obj = classifierNet(10700).cuda()
+    # obj = classifierNet(10700).cuda()
     # obj = classifierNet(48).cuda()
+    obj = classifierNet(64)
 
 
     # obj.load_state_dict(torch.load("model_20240502_134909_1", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_180252_0", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_194941_3", map_location=torch.device('cpu')))
-    obj.load_state_dict(torch.load("model_20240503_141302_0"))
+    obj.load_state_dict(torch.load("model_20240503_152227_2", map_location=torch.device('cpu')))
     # Best so far: model_20240503_014417_17 (old network) model_20240503_141302_0 (new network)
 
     # Run training
-    obj.runTraining(num_epochs=1000)
+    # obj.runTraining(num_epochs=1000)
 
     # Test results
     obj.testClassifier()
