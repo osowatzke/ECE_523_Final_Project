@@ -1,10 +1,18 @@
-import torch.nn as nn
-import torch.nn.functional as F
-import torchvision.ops.boxes as box_ops
-import torchvision.ops as ops
 import torch
+import torch.nn              as nn
+import torch.nn.functional   as F
+import torchvision.ops       as ops
+import torchvision.ops.boxes as box_ops
 
-import AnchorBoxUtilities as anchor_utils
+import torchvision.models.detection.rpn as torch_rpn
+from   torch.utils.data import DataLoader
+from   torchvision.models.detection.anchor_utils import AnchorGenerator
+from   torchvision.models.detection.image_list import ImageList
+
+from BackboneNetwork import *
+from CustomDataset   import CustomDataset
+
+import AnchorBoxUtilities   as anchor_utils
 import BoundingBoxUtilities as bbox_utils
 import SamplingUtilities    as sample_utils
 
@@ -264,9 +272,9 @@ class RegionProposalNetwork(nn.Module):
         return bbox_loss, cls_loss
 
 
-def create_region_proposal_network(image_size, feature_map_size, use_built_in=False):
+def create_region_proposal_network(image_size, feature_map_size, use_built_in_rpn=False):
 
-    if use_built_in:
+    if use_built_in_rpn:
 
         # Create Anchor Generator
         anchor_box_sizes = ((32,64,128),)
@@ -304,15 +312,65 @@ def create_region_proposal_network(image_size, feature_map_size, use_built_in=Fa
     return rpn
 
 
+def create_rpn_dataset(backbone, dataset, use_built_in_rpn=False):
+    rpn_dataset = CustomDataset()
+    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=backbone_collate_fn)
+    for image, targets in data_loader:
+        feature_map = backbone(image)
+        if use_built_in_rpn:
+            sample = (image, feature_map, targets[0])
+        else:
+            targets = targets[0]['boxes']
+            sample = (feature_map, targets)
+        rpn_dataset.append(sample)
+    return rpn_dataset
+
+
+class rpn_collate_fn:
+    def __init__(self, use_built_in_rpn=False):
+        if use_built_in_rpn:
+            self._collate_fn = self._builtin_fn
+        else:
+            self._collate_fn = self._user_fn
+
+    def __call__(self, data):
+        return self._collate_fn(data)
+    
+    def _user_fn(self, data):
+        features = []
+        targets  = []
+        for sample in data:
+            features.append(sample[0])
+            targets.append(sample[1])
+        features = torch.cat(features)
+        return features, targets  
+
+    def _builtin_fn(self, data):
+        images   = []
+        features = []
+        targets  = []
+        for sample in data:
+            images.append(sample[0])
+            features.append(sample[1])
+            targets.append(sample[2])
+        images      = torch.cat(images)
+        num_images  = images.shape[0]
+        image_sizes = (images[0].shape[-2:],) * num_images
+        images      = ImageList(images, image_sizes)
+        features    = {'0' : torch.cat(features)}
+        return images, features, targets
+
+
+def rpn_loss_fn(model_output):
+    loss_dict = model_output[1]
+    losses = sum(loss for loss in loss_dict.values())
+    return losses
+
+
 if __name__ == "__main__":
 
     import math
 
-    import torchvision.models.detection.rpn as torch_rpn
-    from torchvision.models.detection.anchor_utils import AnchorGenerator
-    from torchvision.models.detection.image_list import ImageList
-
-    from BackboneNetwork import BackboneNetwork
     from DataManager     import DataManager
     from PathConstants   import PathConstants
     from FlirDataset     import FlirDataset
@@ -337,30 +395,22 @@ if __name__ == "__main__":
     # Create backbone object
     backbone = BackboneNetwork()
 
-    # Run each image through the backbone
-    images = []
-    targets = []
-    feature_maps = []
-    for i in range(num_images):
-        img = dataset[i][0]
-        img = img.reshape((1,) + img.shape)
-        images.append(img)
-        targets.append(dataset[i][1]['boxes'])
-        feature_map = backbone(img)
-        feature_maps.append(feature_map)
+    # Create dataset for user-defined RPN
+    rpn_dataset = create_rpn_dataset(backbone, dataset, False)
 
     # Extract image sizes and feature map sizes
-    image_size       = images[0].shape
-    feature_map_size = feature_maps[0].shape
+    image_size       = dataset[0][0].shape
+    feature_map_size = rpn_dataset[0][0].shape
 
     # Create user-defined region proposal network
     torch.manual_seed(0)
-
     rpn = create_region_proposal_network(image_size, feature_map_size, False) 
-    
     rpn.train()
     
+    # Create data loader
     torch.manual_seed(0)
+    collate_fn = rpn_collate_fn(False)
+    rpn_data_loader = DataLoader(rpn_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
     # Create optimizer    
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
@@ -368,31 +418,13 @@ if __name__ == "__main__":
     # Loop for each epoch
     for epoch in range(num_epochs):
 
-        # Shuffle the images
-        idx = torch.randperm(num_images)
-
         # Loop for each batch
-        for batch in range(num_batches):
-
-            # Get the starting and ending indices
-            s = batch*batch_size
-            e = s + batch_size
-            e = max(e, num_images)
-
-            # Extract features and targets for batches
-            batch_features = []
-            batch_targets  = []
-            for i in idx[s:e]:
-                batch_features.append(feature_maps[i])
-                batch_targets.append(targets[i])
-
-            # Create tensor from list of tensors
-            batch_features = torch.concat(batch_features)
+        for args in rpn_data_loader:
 
             # Run user-defined model
             optimizer.zero_grad()
-            pred, loss_dict = rpn(batch_features,batch_targets)
-            losses = sum(loss for loss in loss_dict.values())
+            model_output = rpn(*args)
+            losses = rpn_loss_fn(model_output)
             losses.backward()
             optimizer.step()
     
@@ -402,52 +434,32 @@ if __name__ == "__main__":
     # Print newline to separate data
     print()
     
+    # Create dataset for built-in RPN
+    rpn_dataset = create_rpn_dataset(backbone, dataset, True)
+
     # Create built-in region proposal network
     torch.manual_seed(0)
-
     rpn = create_region_proposal_network(image_size, feature_map_size, True) 
-    
     rpn.train()
     
+    # Create data loader
     torch.manual_seed(0)
+    collate_fn = rpn_collate_fn(True)
+    rpn_data_loader = DataLoader(rpn_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
     # Create optimizer    
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
     # Loop for each epoch
     for epoch in range(num_epochs):
-
-        # Shuffle the images
-        idx = torch.randperm(num_images)
-
-        # Loop for each batch
-        for batch in range(num_batches):
-
-            # Get the starting and ending indices
-            s = batch*batch_size
-            e = s + batch_size
-            e = max(e, num_images)
-
-            # Extract features and targets for batches
-            batch_images   = []
-            batch_targets  = []
-            batch_features = []
-            for i in idx[s:e]:
-                batch_images.append(images[i])
-                batch_features.append(feature_maps[i])
-                batch_targets.append({'boxes':targets[i]})
-
-            # Format arguments for built-in region proposal network
-            batch_images = torch.cat(batch_images)
-            num_images = (e - s)
-            image_sizes  = (images[0].shape[-2:],) * num_images
-            batch_images = ImageList(batch_images, image_sizes)
-            batch_features = {'0' : torch.cat(batch_features)}
         
+        # Loop for each batch
+        for args in rpn_data_loader:
+
             # Train built in network
             optimizer.zero_grad()
-            _, loss_dict = rpn(batch_images, batch_features, batch_targets)
-            losses = sum(loss for loss in loss_dict.values())
+            model_output = rpn(*args)
+            losses = rpn_loss_fn(model_output)
             losses.backward()
             optimizer.step()
 

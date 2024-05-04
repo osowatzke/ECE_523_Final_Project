@@ -1,5 +1,7 @@
-from torchvision.models import resnet50, ResNet50_Weights
+import torch
 import torch.nn as nn
+from torchvision.models import resnet50, ResNet50_Weights
+
 
 # Pretrained reset50 Backbone Network
 class BackboneNetwork(nn.Sequential):
@@ -19,7 +21,21 @@ class BackboneNetwork(nn.Sequential):
         # Fix backbone network weights
         for param in self.parameters():
             param.requires_grad = False
-            
+
+
+def backbone_collate_fn(data):
+    images  = []
+    targets = []
+    for sample in data:
+        image = sample[0]
+        image_size = (1,) + image.shape
+        image = image.reshape(image_size)
+        images.append(image)
+        targets.append(sample[1])
+    images = torch.cat(images)
+    return images, targets
+
+
 if __name__ == "__main__":
 
     # Create backbone network
