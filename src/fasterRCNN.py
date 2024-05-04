@@ -11,7 +11,7 @@ from torchvision.ops import MultiScaleRoIAlign
 
 from BackboneNetwork import BackboneNetwork
 from ClassConstants  import ClassConstants
-from RegionProposalNetwork import RegionProposalNetwork
+from RegionProposalNetwork import *
 
 def rcnn_collate_fn(data):
     images = []
@@ -36,10 +36,7 @@ class FasterRCNN(nn.Module):
         self.use_built_in_rpn = use_built_in_rpn
         self.image_size = image_size
         self.__get_feature_map_size()
-        if self.use_built_in_rpn:
-            self.__create_built_in_rpn()
-        else:
-            self.__create_user_rpn()
+        self.__create_rpn() 
         self.__create_roi_heads()
     
     def __get_feature_map_size(self):
@@ -47,32 +44,11 @@ class FasterRCNN(nn.Module):
         output = self.backbone(input)
         self.feature_map_size = output.shape
 
-    def __create_user_rpn(self):
-        self.rpn = RegionProposalNetwork(
-            image_size = self.image_size,
-            feature_map_size = self.feature_map_size
-        )
-
-    def __create_built_in_rpn(self):
-
-        anchor_box_sizes = ((32,64,128),)
-        aspect_ratios = ((0.5,1.0,2.0),)
-        anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
-        num_anchors = len(anchor_box_sizes[0]) * len(aspect_ratios[0])
-
-        rpn_head = torch_rpn.RPNHead(self.feature_map_size[1], num_anchors)
-
-        self.rpn = torch_rpn.RegionProposalNetwork(
-            anchor_generator=anchor_generator,
-            head=rpn_head,
-            fg_iou_thresh=0.5,
-            bg_iou_thresh=0.3,
-            batch_size_per_image=128,
-            positive_fraction=0.5,
-            pre_nms_top_n ={'training': 512, 'testing': 512},
-            post_nms_top_n={'training': 128, 'testing': 128},
-            nms_thresh=0.7,
-            score_thresh=0.5)
+    def __create_rpn(self):
+        self.rpn = create_region_proposal_network(
+            image_size       = self.image_size,
+            feature_map_size = self.feature_map_size,
+            use_built_in_rpn = self.use_built_in_rpn)
 
     def __create_roi_heads(self):
 
