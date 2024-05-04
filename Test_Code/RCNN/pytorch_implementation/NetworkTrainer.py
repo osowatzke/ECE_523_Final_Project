@@ -14,6 +14,8 @@ import math
 import os
 import re
 
+torch.autograd.set_detect_anomaly(True)
+
 def collate_fn(data):
     """
        data: is a list of tuples with (example, label, length)
@@ -38,7 +40,15 @@ class CustomSampler(Sampler):
 class NetworkTrainer:
 
     # Class constructor
-    def __init__(self, data, model, optimizer, num_epochs=1, batch_size=1, save_period={'epoch': 1, 'batch':-1}, device=torch.device('cpu')):
+    def __init__(self,
+                 data,
+                 model,
+                 optimizer,
+                 num_epochs=1,
+                 batch_size=1, 
+                 collate_fn=None,
+                 save_period={'epoch': 1, 'batch':-1},
+                 device=torch.device('cpu')):
         
         # Save inputs to class constructor
         self.data = data
@@ -46,6 +56,7 @@ class NetworkTrainer:
         self.optimizer = optimizer
         self.num_epochs = num_epochs
         self.batch_size = batch_size
+        self.collate_fn = collate_fn
         self.device = device
         self.save_period = save_period
 
@@ -183,6 +194,8 @@ class NetworkTrainer:
 
         # Create TensorBoard SummaryWriter instance
         log_dir = os.path.join('/tmp/runs',os.path.basename(self.run_dir))
+        #log_dir = os.path.dirname(__file__)
+        #log_dir = os.path.join(log_dir,os.path.basename(self.run_dir))
         writer = SummaryWriter(log_dir)
 
         # Save the initial random generator state
@@ -195,7 +208,7 @@ class NetworkTrainer:
         sampler = CustomSampler()
 
         # Create data loader object
-        data_loader = DataLoader(self.data, batch_size=self.batch_size, collate_fn=collate_fn, shuffle=False, sampler=sampler)
+        data_loader = DataLoader(self.data, batch_size=self.batch_size, collate_fn=self.collate_fn, shuffle=False, sampler=sampler)
 
         # Put the model in training model
         self.model.train()
@@ -253,7 +266,7 @@ class NetworkTrainer:
             self.get_epoch_rng_state()
 
             # Loop for each batch
-            for img, targets in data_loader:
+            for args in data_loader:
 
                 # Load the random number generator state if resuming training mid epoch
                 if load_rng_state:
@@ -269,7 +282,7 @@ class NetworkTrainer:
                 self.optimizer.zero_grad()
 
                 # Compute the total loss
-                loss_dict = self.model(img, targets)
+                _, loss_dict = self.model(*args)
                 losses = sum(loss for loss in loss_dict.values())
 
                 # Perform backprogation
@@ -297,6 +310,7 @@ class NetworkTrainer:
             epoch_count += 1
 
         # Save data from the end of the final epoch
+        self.epoch = self.num_epochs
         self.save_state()
 
         # Clear any pending events
@@ -349,6 +363,7 @@ if __name__ == "__main__":
         optimizer   = optimizer,
         num_epochs  = 50,
         batch_size  = 16,
+        collate_fn  = collate_fn,
         save_period = save_period,
         device      = device
     )
