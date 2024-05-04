@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from FlirDataset import FlirDataset
@@ -11,10 +10,10 @@ import loadTrainingData as LTD
 from torch.utils.data.sampler import Sampler
 from BackboneNetwork import BackboneNetwork
 import numpy as np
-from ClassConstants import ClassConstants
 import math
 from torchvision.models.detection.roi_heads import fastrcnn_loss
 from BoundingBoxUtilities import corners_to_centroid, centroids_to_corners
+from ClassConstants import ClassConstants
 
 device = torch.device('cpu')
 # torch.cuda.set_device(0)
@@ -24,6 +23,7 @@ IMG_WIDTH = 7
 IMG_CHANNELS = 2048
 
 BATCH_SIZE = 32
+NUM_CLASSES = 16
 
 BACKBONE_FLAG = True    # True = run data through backbone before classifier
 
@@ -52,9 +52,11 @@ class headNet(nn.Module):
 
         # Third fully connected layer (for classification)
         self.fc3 = nn.Linear(1024, len(self.labels), bias=True)
+        # self.fc3 = nn.Linear(1024, 16, bias=True)
 
         # Fourth fully connected layer (for regression)
         self.fc4 = nn.Linear(1024, 4*len(self.labels), bias=True)
+        # self.fc4 = nn.Linear(1024, 4*16, bias=True)
 
         # Softmax
         self.softmax = torch.nn.Softmax(dim = 1)
@@ -64,14 +66,15 @@ class headNet(nn.Module):
 
         # Create data loaders for our datasets; shuffle for training, not for validation
         self.numSamples = num_images_in
-        PathConstants()
+
+    
+    def initDataLoader(self):
         sampler = LTD.CustomSampler()
         valid_sampler = LTD.CustomSampler()
-        sampler.indices = range(int(num_images_in - num_images_in % BATCH_SIZE))
+        sampler.indices = range(int(self.numSamples - self.numSamples % BATCH_SIZE))
         valid_sampler.indices = range(int(2* BATCH_SIZE))
-        self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=int(num_images_in - num_images_in % BATCH_SIZE), downsample=1, device=None)
-        # self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/10) + int((num_images_in/10)) % BATCH_SIZE, downsample=1, device=None)
-        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(2*BATCH_SIZE), downsample=1, device=None)
+        self.training_set = FlirDataset(r"C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\FLIR_ADAS_v2\images_thermal_train", num_images=int(self.numSamples - self.numSamples % BATCH_SIZE), downsample=1, device=None)
+        self.validation_set = FlirDataset(r"C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\FLIR_ADAS_v2\images_thermal_val", num_images=int(2*BATCH_SIZE), downsample=1, device=None)
         self.training_loader = torch.utils.data.DataLoader(self.training_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
         self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=valid_sampler)
         print('Training set has {} instances'.format(len(self.training_set)))
@@ -230,74 +233,74 @@ class headNet(nn.Module):
     def runNetwork(self, data, backbone):
 
         # Load data
-            inputs, labels = data
+        inputs, labels = data
 
-            # Run data through backbone
-            if backbone:
-                imgs = torch.stack((*inputs,))
-                features = (backbone(imgs))
+        # Run data through backbone
+        if backbone:
+            imgs = torch.stack((*inputs,))
+            features = (backbone(imgs))
 
-            # Number of ROIs (removing ROIs with class -1)
-            numROIs = 0
-            for j in range(len(labels)):
-                for p in range(len(labels[j]["labels"])):
-                    numROIs = numROIs + int(labels[j]["labels"][p] != -1.)
+        # Number of ROIs (removing ROIs with class -1)
+        numROIs = 0
+        for j in range(len(labels)):
+            for p in range(len(labels[j]["labels"])):
+                numROIs = numROIs + int(labels[j]["labels"][p] != -1.)
 
-            # Hold all data
-            labels_ = torch.zeros([numROIs, len(self.labels)]).to(device)
-            labels_db = np.empty((len(labels), len(self.labels))) # DEBUG
-            labels_db[:,3] = 1
-            classes_ = torch.zeros([numROIs]).to(device)
-            imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH]).to(device)
-            boxes_ = torch.zeros([numROIs, 4]).to(device)
-            boxes_db = torch.zeros([numROIs, 5]).to(device)
+        # Hold all data
+        labels_ = torch.zeros([numROIs, len(self.labels)]).to(device)
+        labels_db = np.empty((len(labels), len(self.labels))) # DEBUG
+        labels_db[:,3] = 1
+        classes_ = torch.zeros([numROIs]).to(device)
+        imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH]).to(device)
+        boxes_ = torch.zeros([numROIs, 4]).to(device)
+        boxes_db = torch.zeros([numROIs, 5]).to(device)
 
-            # ROI Pooling
-            # For each image in the batch
-            totalROIs = 0
-            k = 0
-            for label in labels:
+        # ROI Pooling
+        # For each image in the batch
+        totalROIs = 0
+        k = 0
+        for label in labels:
 
-                # Number of ROIs in this image
-                numROIs_this_img = 0
-                for p in range(len(label["labels"])):
-                    numROIs_this_img = numROIs_this_img + int(label["labels"][p] != -1.)
-            
-                # For each ROI in image
-                j = 0
-                numTrueROIs = 0
-                temp = torch.zeros(numROIs_this_img, 4).to(device)
-                for j in range(len(label["labels"])):
+            # Number of ROIs in this image
+            numROIs_this_img = 0
+            for p in range(len(label["labels"])):
+                numROIs_this_img = numROIs_this_img + int(label["labels"][p] != -1.)
+        
+            # For each ROI in image
+            j = 0
+            numTrueROIs = 0
+            temp = torch.zeros(numROIs_this_img, 4).to(device)
+            for j in range(len(label["labels"])):
 
-                    # Determine class
-                    class_ = label["labels"][j]
+                # Determine class
+                class_ = label["labels"][j]
 
-                    # If it's not class -1:
-                    if class_ != torch.tensor(-1.).to(device):
+                # If it's not class -1:
+                if class_ != torch.tensor(-1.).to(device):
 
-                        # Creating ideal output
-                        labels_[totalROIs, int(class_)] = 1.0
-                        classes_[totalROIs] = int(class_)
+                    # Creating ideal output
+                    classes_[totalROIs] = int(class_)
 
-                        # Extracting bounding boxes
-                        boxes_[totalROIs, :] = label["boxes"][j].to(device)
-                        temp[numTrueROIs,:] = label["boxes"][j]
-                        boxes_db[totalROIs] = torch.cat((torch.tensor([k]).to(device), (label["boxes"][j]).to(device)), 0)
+                    # Extracting bounding boxes
+                    # boxes_[totalROIs, :] = label["boxes"][j].to(device)
+                    boxes_[totalROIs, :] = torch.tensor([0, 0, 1, 1])
+                    temp[numTrueROIs,:] = label["boxes"][j]
+                    boxes_db[totalROIs] = torch.cat((torch.tensor([k]).to(device), (label["boxes"][j]).to(device)), 0)
 
-                        numTrueROIs = numTrueROIs + 1
-                        totalROIs = totalROIs + 1
-                k = k + 1
-            
-            # Experimental: Pytorch RoI Pooling
-            imgs_pyt = torchvision.ops.roi_pool(features.to(device), boxes_db.to(device), (7, 7), 0.03125)
+                    numTrueROIs = numTrueROIs + 1
+                    totalROIs = totalROIs + 1
+            k = k + 1
+        
+        # Experimental: Pytorch RoI Pooling
+        imgs_pyt = torchvision.ops.roi_pool(features.to(device), boxes_db.to(device), (7, 7), 0.03125)
 
-            # Re-format feature space to make it compatible with FCL dimensions
-            features = torch.flatten(imgs_pyt, start_dim = 1)
+        # Re-format feature space to make it compatible with FCL dimensions
+        features = torch.flatten(imgs_pyt, start_dim = 1)
 
-            # Run batch through network
-            outputs = self(features, classes_, boxes_)
+        # Run batch through network
+        outputs = self(features, classes_, boxes_)
 
-            return outputs, classes_, boxes_
+        return outputs, classes_, boxes_
 
     def testClassifier(self):
 
@@ -310,7 +313,7 @@ class headNet(nn.Module):
                 backbone = BackboneNetwork()
 
             # For each batch
-            for i, tdata in enumerate(self.validation_loader):
+            for i, tdata in enumerate(self.training_loader):
 
                 toutputs, tclasses_, tboxes_ = self.runNetwork(tdata, backbone)
 
@@ -329,16 +332,18 @@ if __name__ == "__main__":
     torch.manual_seed(69)
     torch.autograd.set_detect_anomaly(True)
 
+
     # Object
     # obj = classifierNet(10700).cuda()
     # obj = classifierNet(48).cuda()
-    obj = headNet(64)
+    obj = headNet(10700)
+    obj.initDataLoader()
 
 
     # obj.load_state_dict(torch.load("model_20240502_134909_1", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_180252_0", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_194941_3", map_location=torch.device('cpu')))
-    obj.load_state_dict(torch.load("model_20240503_152227_2", map_location=torch.device('cpu')))
+    # obj.load_state_dict(torch.load("model_20240503_152227_4", map_location=torch.device('cpu')))
     # Best so far: model_20240503_014417_17 (old network) model_20240503_141302_0 (new network)
 
     # Run training

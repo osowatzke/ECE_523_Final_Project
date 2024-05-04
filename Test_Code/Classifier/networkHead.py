@@ -24,6 +24,7 @@ IMG_WIDTH = 7
 IMG_CHANNELS = 2048
 
 BATCH_SIZE = 32
+NUM_CLASSES = 16
 
 BACKBONE_FLAG = True    # True = run data through backbone before classifier
 
@@ -51,10 +52,12 @@ class headNet(nn.Module):
         self.m = nn.BatchNorm1d(1024)
 
         # Third fully connected layer (for classification)
-        self.fc3 = nn.Linear(1024, len(self.labels), bias=True)
+        # self.fc3 = nn.Linear(1024, len(self.labels), bias=True)
+        self.fc3 = nn.Linear(1024, 16, bias=True)
 
         # Fourth fully connected layer (for regression)
-        self.fc4 = nn.Linear(1024, 4*len(self.labels), bias=True)
+        # self.fc4 = nn.Linear(1024, 4*len(self.labels), bias=True)
+        self.fc4 = nn.Linear(1024, 4*16, bias=True)
 
         # Softmax
         self.softmax = torch.nn.Softmax(dim = 1)
@@ -64,14 +67,15 @@ class headNet(nn.Module):
 
         # Create data loaders for our datasets; shuffle for training, not for validation
         self.numSamples = num_images_in
-        PathConstants()
+
+    
+    def initDataLoader(self):
         sampler = LTD.CustomSampler()
         valid_sampler = LTD.CustomSampler()
-        sampler.indices = range(int(num_images_in - num_images_in % BATCH_SIZE))
+        sampler.indices = range(int(self.numSamples - self.numSamples % BATCH_SIZE))
         valid_sampler.indices = range(int(2* BATCH_SIZE))
-        self.training_set = FlirDataset(PathConstants.TRAIN_DIR, num_images=int(num_images_in - num_images_in % BATCH_SIZE), downsample=1, device=None)
-        # self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(num_images_in/10) + int((num_images_in/10)) % BATCH_SIZE, downsample=1, device=None)
-        self.validation_set = FlirDataset(PathConstants.VAL_DIR, num_images=int(2*BATCH_SIZE), downsample=1, device=None)
+        self.training_set = FlirDataset(r"C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\FLIR_ADAS_v2\images_thermal_train", num_images=int(self.numSamples - self.numSamples % BATCH_SIZE), downsample=1, device=None)
+        self.validation_set = FlirDataset(r"C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\FLIR_ADAS_v2\images_thermal_val", num_images=int(2*BATCH_SIZE), downsample=1, device=None)
         self.training_loader = torch.utils.data.DataLoader(self.training_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=sampler)
         self.validation_loader = torch.utils.data.DataLoader(self.validation_set, batch_size=BATCH_SIZE, collate_fn=LTD.collate_fn, shuffle=False, sampler=valid_sampler)
         print('Training set has {} instances'.format(len(self.training_set)))
@@ -122,6 +126,11 @@ class headNet(nn.Module):
         return c, r, classification_loss, box_loss
     
 
+    def lossSumFn(inputs):
+        # inputs is the exact output of the forward path
+        return sum((inputs[2], inputs[3]))
+
+
     def trainOneEpoch(self, epoch_index, tb_writer, backbone=None):
 
         # Loss metrics
@@ -163,12 +172,7 @@ class headNet(nn.Module):
                 running_loss = 0
             
         return running_loss / i
-    
 
-    def trainWithOneBatchFromRPN():
-        pass
-
-    
 
     def runTraining(self, num_epochs=5):
 
@@ -244,8 +248,10 @@ class headNet(nn.Module):
                     numROIs = numROIs + int(labels[j]["labels"][p] != -1.)
 
             # Hold all data
-            labels_ = torch.zeros([numROIs, len(self.labels)]).to(device)
-            labels_db = np.empty((len(labels), len(self.labels))) # DEBUG
+            # labels_ = torch.zeros([numROIs, len(self.labels)]).to(device)
+            # labels_db = np.empty((len(labels), len(self.labels))) # DEBUG
+            labels_ = torch.zeros([numROIs, 16]).to(device)
+            labels_db = np.empty((len(labels), 16)) # DEBUG
             labels_db[:,3] = 1
             classes_ = torch.zeros([numROIs]).to(device)
             imgs_ = torch.zeros([numROIs, IMG_CHANNELS, IMG_HEIGHT, IMG_WIDTH]).to(device)
@@ -276,7 +282,6 @@ class headNet(nn.Module):
                     if class_ != torch.tensor(-1.).to(device):
 
                         # Creating ideal output
-                        labels_[totalROIs, int(class_)] = 1.0
                         classes_[totalROIs] = int(class_)
 
                         # Extracting bounding boxes
@@ -329,16 +334,18 @@ if __name__ == "__main__":
     torch.manual_seed(69)
     torch.autograd.set_detect_anomaly(True)
 
+
     # Object
     # obj = classifierNet(10700).cuda()
     # obj = classifierNet(48).cuda()
     obj = headNet(64)
+    obj.initDataLoader()
 
 
     # obj.load_state_dict(torch.load("model_20240502_134909_1", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_180252_0", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_194941_3", map_location=torch.device('cpu')))
-    obj.load_state_dict(torch.load("model_20240503_152227_2", map_location=torch.device('cpu')))
+    obj.load_state_dict(torch.load("model_20240503_152227_4", map_location=torch.device('cpu')))
     # Best so far: model_20240503_014417_17 (old network) model_20240503_141302_0 (new network)
 
     # Run training
