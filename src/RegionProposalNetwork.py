@@ -263,6 +263,47 @@ class RegionProposalNetwork(nn.Module):
 
         return bbox_loss, cls_loss
 
+
+def create_region_proposal_network(image_size, feature_map_size, use_built_in=False):
+
+    if use_built_in:
+
+        # Create Anchor Generator
+        anchor_box_sizes = ((32,64,128),)
+        aspect_ratios    = ((0.5,1.0,2.0),)
+        anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
+
+        # Create region proposal head
+        num_anchors = len(anchor_box_sizes[0]) * len(aspect_ratios[0])
+        rpn_head = torch_rpn.RPNHead(feature_map_size[1], num_anchors)
+
+        # Limits for non-max suppression
+        pre_nms_top_n  = {'training' : 1024, 'testing' : 1024}
+        post_nms_top_n = {'training' : 512,  'testing' : 512}
+
+        # Create built-in region proposal network
+        rpn = torch_rpn.RegionProposalNetwork(
+            anchor_generator     = anchor_generator,
+            head                 = rpn_head,
+            fg_iou_thresh        = 0.7,
+            bg_iou_thresh        = 0.3,
+            batch_size_per_image = 256,
+            positive_fraction    = 0.5,
+            pre_nms_top_n        = pre_nms_top_n,
+            post_nms_top_n       = post_nms_top_n,
+            nms_thresh           = 0.7,
+            score_thresh         = 0.0)
+        
+    else:
+
+        # Create user-defined region proposal network
+        rpn = RegionProposalNetwork(
+            image_size       = image_size,
+            feature_map_size = feature_map_size)
+
+    return rpn
+
+
 if __name__ == "__main__":
 
     import math
@@ -272,6 +313,7 @@ if __name__ == "__main__":
     from torchvision.models.detection.image_list import ImageList
 
     from BackboneNetwork import BackboneNetwork
+    from DataManager     import DataManager
     from PathConstants   import PathConstants
     from FlirDataset     import FlirDataset
     
@@ -283,8 +325,11 @@ if __name__ == "__main__":
     # Compute the number of batches
     num_batches = math.ceil(num_images/batch_size)
 
-    # Create path constants singleton
-    PathConstants()
+    # Download dataset
+    data_manager = DataManager('train')
+    data_manager.download_datasets()
+    data_dir = data_manager.get_download_dir()
+    PathConstants(data_dir)
 
     # Create dataset object
     dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=num_images)
@@ -304,14 +349,21 @@ if __name__ == "__main__":
         feature_map = backbone(img)
         feature_maps.append(feature_map)
 
+    # Extract image sizes and feature map sizes
+    image_size       = images[0].shape
+    feature_map_size = feature_maps[0].shape
+
     # Create user-defined region proposal network
     torch.manual_seed(0)
 
-    rpn = RegionProposalNetwork(images[0].shape, feature_maps[0].shape) 
+    rpn = create_region_proposal_network(image_size, feature_map_size, False) 
     
-    optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
+    rpn.train()
     
     torch.manual_seed(0)
+
+    # Create optimizer    
+    optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
     # Loop for each epoch
     for epoch in range(num_epochs):
@@ -350,34 +402,17 @@ if __name__ == "__main__":
     # Print newline to separate data
     print()
     
-    # Create Anchor Generator
-    anchor_box_sizes = ((32,64,128),)
-    aspect_ratios = ((0.5,1.0,2.0),)
-    anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
-
-    # Create build in region proposal network
+    # Create built-in region proposal network
     torch.manual_seed(0)
 
-    # Create region proposal head
-    rpn_head = torch_rpn.RPNHead(feature_maps[0].shape[1],9)
-
-    rpn = torch_rpn.RegionProposalNetwork(
-        anchor_generator=anchor_generator,
-        head=rpn_head,
-        fg_iou_thresh=0.5,
-        bg_iou_thresh=0.3,
-        batch_size_per_image=128,
-        positive_fraction=0.5,
-        pre_nms_top_n ={'training': 512, 'test': 512},
-        post_nms_top_n={'training': 128, 'test': 128},
-        nms_thresh=0.7,
-        score_thresh=0.5)
+    rpn = create_region_proposal_network(image_size, feature_map_size, True) 
     
     rpn.train()
-
-    optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
     
     torch.manual_seed(0)
+
+    # Create optimizer    
+    optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
     # Loop for each epoch
     for epoch in range(num_epochs):
