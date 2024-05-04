@@ -122,6 +122,11 @@ class headNet(nn.Module):
         return c, r, classification_loss, box_loss
     
 
+    def lossSumFn(inputs):
+        # inputs is the exact output of the forward path
+        return sum((inputs[2], inputs[3]))
+
+
     def trainOneEpoch(self, epoch_index, tb_writer, backbone=None):
 
         # Loss metrics
@@ -163,12 +168,7 @@ class headNet(nn.Module):
                 running_loss = 0
             
         return running_loss / i
-    
 
-    def trainWithOneBatchFromRPN():
-        pass
-
-    
 
     def runTraining(self, num_epochs=5):
 
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     # Best so far: model_20240503_014417_17 (old network) model_20240503_141302_0 (new network)
 
     # Run training
-    # obj.runTraining(num_epochs=1000)
+    obj.runTraining(num_epochs=1000)
 
     # Test results
     obj.testClassifier()
