@@ -202,11 +202,7 @@ class NetworkTrainer:
     def train(self):
 
         # Create TensorBoard SummaryWriter instance
-        # log_dir = os.path.join('/tmp/runs',os.path.basename(self.run_dir))
-        log_dir = os.path.dirname(__file__)
-        log_dir = os.path.join(log_dir,os.path.basename(self.run_dir))
-
-        writer = SummaryWriter(log_dir)
+        writer = SummaryWriter(self.run_dir)
 
         # Save the initial random generator state
         self.get_init_rng_state()
