@@ -23,6 +23,11 @@ def rcnn_collate_fn(data):
     images = images.reshape((len(data),) + data[0][0].shape)
     return images, targets
 
+def rcnn_loss_fn(model_output):
+    loss_dict = model_output[1]
+    losses = sum(loss for loss in loss_dict.values())
+    return losses
+
 class FasterRCNN(nn.Module):
 
     def __init__(self, image_size, use_built_in_rpn=False):
@@ -149,7 +154,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
     # Create Faster RCNN Network
     print(train_data[0][0].shape)
@@ -169,7 +174,8 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 32,
+        batch_size  = 1,
+        loss_fn     = rcnn_loss_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
         device      = device
