@@ -1,264 +1,178 @@
-from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from ClassConstants import ClassConstants
-from PathConstants import PathConstants
-from matplotlib.patches import Rectangle
-import matplotlib.pyplot as plt
-from JsonParser import JsonParser
-from torch import Tensor
-from FlirDataset import FlirDataset
-import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler
-from torch.utils.data.sampler import Sampler
-import os
-import cv2
-import math
-import random
+import torch.nn as nn
+import torchvision.models.detection.rpn as torch_rpn
 
-def collate_fn(data):
-    """
-       data: is a list of tuples with (example, label, length)
-             where 'example' is a tensor of arbitrary shape
-             and label/length are scalars
-    """
-    # print(data)
+from torchvision.models.detection.anchor_utils import AnchorGenerator
+from torchvision.models.detection.image_list import ImageList
+
+from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
+from torchvision.models.detection.roi_heads import RoIHeads
+from torchvision.ops import MultiScaleRoIAlign
+
+from BackboneNetwork import BackboneNetwork
+from ClassConstants  import ClassConstants
+from RegionProposalNetwork import RegionProposalNetwork
+
+def rcnn_collate_fn(data):
     images = []
     targets = []
-    idx = []
     for sample in data:
         images.append(sample[0])
         targets.append(sample[1])
-        idx.append(sample[2])
-    return images, targets, idx
-    # targets = for sample in data
-    # print(data)
-    # _, labels, lengths = zip(*data)
-    # max_len = max(lengths)
-    # n_ftrs = data[0][0].size(1)
-    # features = torch.zeros((len(data), max_len, n_ftrs))
-    # labels = torch.tensor(labels)
-    # lengths = torch.tensor(lengths)
+    images = torch.cat(images)
+    images = images.reshape((len(data),) + data[0][0].shape)
+    return images, targets
 
-    # for i in range(len(data)):
-    #     j, k = data[i][0].size(0), data[i][0].size(1)
-    #     features[i] = torch.cat([data[i][0], torch.zeros((max_len - j, k))])
+class FasterRCNN(nn.Module):
 
-    # return features.float(), labels.long(), lengths.long()
-
-def save_state(epoch, model, optimizer):
-    torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer.state_dict': optimizer.state_dict(),
-        'random_state' : random.getstate(),
-        'numpy_random_state' : np.random.get_state(),
-        'torch_random_state' : torch.random.get_rng_state(),
-    })
-
-class CustomSampler(Sampler):
-    def __init__(self, indices):
-        # super(self).__init__()
-        self.indices = indices
-
-    def __iter__(self):
-        return iter(self.indices)
+    def __init__(self, image_size, use_built_in_rpn=False):
+        super().__init__()
+        self.backbone = BackboneNetwork()
+        self.use_built_in_rpn = use_built_in_rpn
+        self.image_size = image_size
+        self.__get_feature_map_size()
+        if self.use_built_in_rpn:
+            self.__create_built_in_rpn()
+        else:
+            self.__create_user_rpn()
+        self.__create_roi_heads()
     
-    # def __len__
-        
-def runModel():
-  
-    # Fix random number generator seed for repeatability
-    torch.manual_seed(0)
-    np.random.seed(0)
-    random.seed(0)
+    def __get_feature_map_size(self):
+        input = torch.zeros((1,) + self.image_size)
+        output = self.backbone(input)
+        self.feature_map_size = output.shape
 
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    device = torch.device(device)
-    # torch.cuda.set_device(device)
+    def __create_user_rpn(self):
+        self.rpn = RegionProposalNetwork(
+            image_size = self.image_size,
+            feature_map_size = self.feature_map_size
+        )
 
-    # Load Faster RCNN model with default weights
-    model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(ClassConstants.LABELS.keys()))
-    model.to(device)
+    def __create_built_in_rpn(self):
 
-    # Load training data
-    # json_path = os.path.join(PathConstants.TRAIN_DIR,'index.json')
-    # print(json_path)
-    # json_parser = JsonParser(json_path)
+        anchor_box_sizes = ((32,64,128),)
+        aspect_ratios = ((0.5,1.0,2.0),)
+        anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
+        num_anchors = len(anchor_box_sizes[0]) * len(aspect_ratios[0])
 
-    # Get boxes and image paths from JSON parser
-    # boxes = json_parser.gt_boxes_all
-    # labels = json_parser.gt_classes_all
-    # img_paths = json_parser.img_paths
+        rpn_head = torch_rpn.RPNHead(self.feature_map_size[1], num_anchors)
 
-    # Number of images to load
-    # num_images = 10
+        self.rpn = torch_rpn.RegionProposalNetwork(
+            anchor_generator=anchor_generator,
+            head=rpn_head,
+            fg_iou_thresh=0.5,
+            bg_iou_thresh=0.3,
+            batch_size_per_image=128,
+            positive_fraction=0.5,
+            pre_nms_top_n ={'training': 512, 'testing': 512},
+            post_nms_top_n={'training': 128, 'testing': 128},
+            nms_thresh=0.7,
+            score_thresh=0.5)
 
-    # Create list of targets
-    # One entry per image
-    # targets = []
-    # for i in range(num_images):
-    #     d = {}
-    #     d['boxes'] = boxes[i].to(device)
-    #     d['labels'] = labels[i].to(device)
-    #     targets.append(d)
+    def __create_roi_heads(self):
 
-    # targets.to(device)
+        box_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=7, sampling_ratio=2)
 
-    # Load training images
-    # images = []
-    # for i in range(num_images):
-    #     img_path = os.path.join(PathConstants.TRAIN_DIR,'data',img_paths[i])
-    #     img = plt.imread(img_path)
-    #     if (img.ndim == 2):
-    #       img = img.reshape((-1,) + img.shape)
-    #     else:
-    #       img = np.moveaxis(img, 2, 0)
-    #     # img.to(device)
-    #     # print(img.shape)
-    #     #else:
-    #     #  img = np.swapaxes(np.swapaxes(img, 0, 1), 1, 2)
-    #     #plt.imshow(img)
-    #     # plt.show()
-    #     images.append(img)
-# 
-    # images = Tensor(np.array(images))
-    # images = images.to(device)
-    # images.cuda()
-    # print(images.shape)
-    #output = model(images, targets)
-    #print(output)
+        resolution = box_roi_pool.output_size[0]
+        representation_size = 1024
+        out_channels = self.feature_map_size[1]
+        box_head = TwoMLPHead(out_channels * resolution**2, representation_size)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-7, momentum=0)
+        num_classes = len(ClassConstants.LABELS.keys())
+        representation_size = 1024
+        box_predictor = FastRCNNPredictor(representation_size, num_classes)
 
-    curr_file_path = os.path.dirname(__file__)
-    run_dir = os.path.join(curr_file_path,'run')
-    if not os.path.exists(run_dir):
-        os.makedirs(run_dir)
-    model_path = os.path.join(run_dir,'trained_model.pth')
+        bbox_reg_weights = (10.0, 10.0, 5.0, 5.0)
 
-    DO_TRAINING = False
-    NUM_EPOCHS = 10
-    BATCH_SIZE = 2
-    MAX_BATCHES = 250
+        self.roi_heads = RoIHeads(
+            box_roi_pool         = box_roi_pool,
+            box_head             = box_head,
+            box_predictor        = box_predictor,
+            # Faster R-CNN training
+            fg_iou_thresh        = 0.5,
+            bg_iou_thresh        = 0.5,
+            batch_size_per_image = 512,
+            positive_fraction    = 0.25,
+            bbox_reg_weights     = bbox_reg_weights,
+            # Faster R-CNN inference
+            score_thresh         = 0.05,
+            nms_thresh           = 0.5,
+            detections_per_img   = 100)
 
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
-    data_loader = DataLoader(train_data, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True)
-    # for idx, (img, targets) in enumerate(data_loader):
-    #     for box in targets[0]['boxes']:
-    #         w = box[2] - box[0] #targets[0]['boxes'] - targets[0]['boxes']
-    #         h = box[3] - box[1] #targets[0]['boxes'] - targets[0]['boxes']
-    #         if w < 0.01 or h < 0.01:
-    #             print(idx, box, w, h)
-    #             break
+    def to(self,device):
+        super().to(device)
+        self.rpn.to(device)
 
-
-    num_samples = len(train_data)
-    num_batches = math.ceil(num_samples/BATCH_SIZE)
-    batch_count = 0
-    kill_run = False
-    #print(num_samples)
-    #print(num_batches)
-
-    if DO_TRAINING:
-        model.train()
-        for epoch in range(NUM_EPOCHS):
-            total_loss = 0.0
-            print(f'Beginning epoch {epoch+1}/{NUM_EPOCHS}:')
-            for idx, (img, targets) in enumerate(data_loader):
-                #img = [i for i in img]
-                #targets = [{'boxes': boxes, 'labels': labels} for boxes, labels in zip(targets['boxes'], targets['labels'])]
-                # print(targets[0])
-                optimizer.zero_grad()
-                loss_dict = model(img, targets)
-                losses = sum(loss for loss in loss_dict.values())
-                losses.backward()
-                optimizer.step()
-                print(f'Batch Loss ({idx + 1}/{num_batches}): {losses.item()}')
-                total_loss += losses.item() * len(img)
-                batch_count += 1
-                if (MAX_BATCHES > 0):
-                    if batch_count == MAX_BATCHES:
-                        kill_run = True
-                        break
-            print(f'Total loss: {total_loss/num_samples}')
-            if kill_run:
-                break
-        # for epoch in range(NUM_EPOCHS):
-        #     print(f'Beginning epoch: {epoch+1}')
-        #     total_loss = 0.0
-        #     indexes = torch.randperm(images.shape[0])
-        #     images = images[indexes]
-        #     targets = [targets[index] for index in indexes]
-        #     for idx in range(0, images.shape[0], BATCH_SIZE):
-        #         
-        #         model.train()
-        #         optimizer.zero_grad()
-        #         #print(images.dtype)
-        #         loss_dist = model(images,targets)
-        #         losses = sum(loss for loss in loss_dist.values())
-        #         losses.backward()
-        #         optimizer.step()
-        #         total_loss += losses.item()
-        #     print(f'Epoch [{epoch+1}/{NUM_EPOCHS}], loss:{losses.item():.4f}')
-        torch.save(model, model_path)
-    else:
-        model = torch.load(model_path)
-
-    #print(model)
-    model.eval()
-    image_idx = 5
-    pred = model([train_data[0][0]])
-    print(ClassConstants.LABELS.keys())
-    # pred = [list(i.cpu()) for i in pred]
-    targets = [train_data[0][1]]
-    pred_class = [list(ClassConstants.LABELS.keys())[i] for i in list(pred[0]['labels'].cpu().numpy())]
-    pred_boxes = [[np.int64((i[0], i[1])), np.int64((i[2]-i[0]+1, i[3]-i[1]+1))] for i in list(pred[0]['boxes'].detach().cpu().numpy())]
-    true_boxes = [[np.int64((i[0], i[1])), np.int64((i[2]-i[0]+1, i[3]-i[1]+1))] for i in list(targets[0]['boxes'].detach().cpu().numpy())]
-    pred_score = list(pred[0]['scores'].detach().cpu().numpy())
-    pred_t = [pred_score.index(x) for x in pred_score if x>0.7][-1]
-    pred_boxes = pred_boxes[:pred_t+1]
-    pred_class = pred_class[:pred_t+1]
-    img = train_data[0][0].cpu().numpy()
-    # img = np.uint8(np.moveaxis(img,0,2))
-    img = img[0,:,:]
-    plt.imshow(img, cmap=plt.get_cmap('gray'))
-    for i in range(len(pred_boxes)):
-        ax = plt.gca()
-        # rect = Rectangle((10, 10), 64, 64, linewidth=1, edgecolor='r', facecolor='none') #np.int64(pred_boxes[i][0]), np.int64(pred_boxes[i][1]), (0,255,0), 1)
-        rect = Rectangle(pred_boxes[i][0], pred_boxes[i][1][0], pred_boxes[i][1][1], linewidth=1, edgecolor='r', facecolor='none')
-        # rect = Rectangle(np.int64(targets[0][i,0:1]), np.int64(targets[0][i,2]), np.int64(targets[0][i,3]), linewidth=1, edgecolor='r', facecolor='none')
-        ax.add_patch(rect)
-        # cv2.putText(img, pred_class[i], np.int64(pred_boxes[i][0]), cv2.FONT_HERSHEY_SIMPLEX, 12, (0,255,0), 1)
-        # plt.figure() 
-    plt.xticks([])
-    plt.yticks([])
-    plt.show()
+    def forward(self, images, targets=None):
+        feature_maps = self.backbone(images)
+        image_sizes = (self.image_size[-2:],) * images.shape[0]
+        image_list = ImageList(images, image_sizes)
+        if self.use_built_in_rpn:
+            feature_maps = {'0': feature_maps}
+            proposals, rpn_loss = self.rpn(image_list, feature_maps, targets)
+        else:
+            target_boxes = [target['boxes'] for target in targets]
+            proposals, rpn_loss = self.rpn(feature_maps, target_boxes)
+        if not isinstance(feature_maps,dict):
+            feature_maps = {'0': feature_maps}
+        detections, detection_loss = self.roi_heads(feature_maps, proposals, image_sizes, targets)
+        losses = {}
+        losses.update(rpn_loss)
+        losses.update(detection_loss)
+        return detections, losses
 
 if __name__ == "__main__":
-    # runModel()
+    
+    from DataManager    import DataManager
+    from FlirDataset    import FlirDataset
+    from NetworkTrainer import NetworkTrainer
+    from PathConstants  import PathConstants
 
-    # Fix random number generator seed for repeatability
+    import numpy as np
+    import random
+
+    # Create path constants singleton
+    data_manager = DataManager()
+    data_manager.download_datasets()
+
+    data_dir = data_manager.get_download_dir()
+    PathConstants(data_dir)
+    #PathConstants('/tmp/FLIR_ADAS_v2')
+
+    # Set the initial random number generator seed
     torch.manual_seed(0)
     np.random.seed(0)
     random.seed(0)
 
-    #train_data = FlirDataset(PathConstants.TRAIN_DIR) #, device=device)
-    #random_sampler = RandomSampler(data_source=train_data,num_samples=len(train_data))
-    #rng_state = torch.random.get_rng_state()
-    #idx = list(iter(random_sampler))
-    #torch.random.set_rng_state(rng_state)
-    #resume_epoch_sampler = CustomSampler(indices=idx)
-    sampler = CustomSampler(None)
-    train_data = FlirDataset(PathConstants.TRAIN_DIR) #, device=device)
-    data_loader = DataLoader(train_data, batch_size=16, collate_fn=collate_fn, shuffle=False, sampler=sampler)
-    # idx = list(iter(resume_epoch_sampler))
-    for epoch in range(10):
-        # sampler.indices = np.arange(len(train_data)) 
-        sampler.indices = np.random.permutation(len(train_data))
-        for img, target, idx in data_loader:
-            print(idx)
-            break
-            #plt.imshow(img[0,:,:], cmap=plt.get_cmap('gray'))
+    # Determine the device
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    device = torch.device(device)
+
+    # Create dataset object
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+
+    # Create Faster RCNN Network
+    print(train_data[0][0].shape)
+    model = FasterRCNN(train_data[0][0].shape)
+    model.to(device)
+
+    # Create optimizer
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
+    
+    # Set the period for saving data
+    # -1 will cause data not to be saved
+    save_period = {'epoch' : 1, 'batch' : -1}
+    
+    # Create network trainer
+    net_trainer = NetworkTrainer(
+        data        = train_data, 
+        model       = model,
+        optimizer   = optimizer,
+        num_epochs  = 50,
+        batch_size  = 32,
+        collate_fn  = rcnn_collate_fn,
+        save_period = save_period,
+        device      = device
+    )
+
+    net_trainer.train()
