@@ -4,7 +4,7 @@ import torchvision.ops.boxes as box_ops
 import torchvision.ops as ops
 import torch
 
-import AnchorBoxUtilities   as anchor_utils
+import AnchorBoxUtilities as anchor_utils
 import BoundingBoxUtilities as bbox_utils
 import SamplingUtilities    as sample_utils
 

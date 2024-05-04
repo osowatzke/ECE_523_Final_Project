@@ -1,9 +1,10 @@
 from torch.utils.data import Dataset
 
 class CustomDataset(Dataset):
-    def __init__(self, data=[]):
+    def __init__(self, data = None):
         super().__init__()
-        self.data = data
+        if data is None:
+            self.data = []
 
     def __len__(self):
         return len(self.data)
@@ -13,6 +14,3 @@ class CustomDataset(Dataset):
     
     def append(self,data_sample):
         self.data.append(data_sample)
-        # print(len(self.data[-1]))
-        # print(len(self.data))
-        # pass

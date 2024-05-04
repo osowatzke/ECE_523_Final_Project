@@ -7,7 +7,6 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from FlirDataset import FlirDataset
 from PathConstants import PathConstants
-import loadTrainingData as LTD
 from torch.utils.data.sampler import Sampler
 from BackboneNetwork import BackboneNetwork
 import numpy as np
