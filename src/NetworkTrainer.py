@@ -52,6 +52,7 @@ class NetworkTrainer:
                  data,
                  model,
                  optimizer,
+                 run_folder,
                  num_epochs=1,
                  batch_size=1,
                  loss_fn=None,
@@ -93,7 +94,7 @@ class NetworkTrainer:
         self.loss = []
 
         # Create run directory for outputs
-        self.get_run_dir()
+        self.get_run_dir(run_folder)
         os.makedirs(self.run_dir)
 
         # Create TensorBoard SummaryWriter instance
@@ -254,11 +255,13 @@ class NetworkTrainer:
         self.load_init_rng_state()
          
     # Function computes the path to the run directory
-    def get_run_dir(self):
+    def get_run_dir(self, run_folder):
         class_path = os.path.dirname(__file__)
+        run_root_dir = os.path.join(class_path,'..','runs',run_folder)
+        run_root_dir = os.path.abspath(run_root_dir)
         current_time = datetime.now()
         current_time = current_time.strftime("%Y-%m-%d_%H-%M-%S")
-        self.run_dir = os.path.join(class_path,'run',f"run__{current_time}")
+        self.run_dir = os.path.join(run_root_dir,f"run__{current_time}")
         
     # Function defines the training loop
     def train(self):
@@ -413,11 +416,15 @@ if __name__ == "__main__":
     # Create dataset object
     train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=10, device=device)
 
+    # Run subfolder
+    run_folder = 'built_in_faster_rcnn'
+
     # Create network trainer
     net_trainer = NetworkTrainer(
         data        = train_data, 
         model       = model,
         optimizer   = optimizer,
+        run_folder  = run_folder,
         num_epochs  = 50,
         batch_size  = 1,
         loss_fn     = loss_fn,
@@ -427,7 +434,7 @@ if __name__ == "__main__":
     )
 
     # Uncomment and adjust path to resume training
-    net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run','run__2024-05-04_14-52-14'))
+    # net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run','run__2024-05-04_14-52-14'))
     
     # Train model
     net_trainer.train()

@@ -63,10 +63,13 @@ optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_deca
 
 collate_fn = rpn_collate_fn(use_built_in_rpn)
 
+run_folder = 'region_proposal_network'
+
 network_trainer = NetworkTrainer(
     data       = rpn_dataset,
     model      = rpn,
     optimizer  = optimizer,
+    run_folder = run_folder,
     num_epochs = 1,
     batch_size = 1,
     loss_fn    = rpn_loss_fn,
@@ -89,10 +92,13 @@ optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-5, momentum=0.9, weight_deca
 loss_fn = roi_loss_fn(use_built_in_roi_heads)
 collate_fn = roi_collate_fn(use_built_in_roi_heads)
 
+run_folder = 'roi_heads_network'
+
 network_trainer = NetworkTrainer(
     data       = roi_dataset,
     model      = roi_heads,
     optimizer  = optimizer,
+    run_folder = run_folder,
     num_epochs = 1,
     batch_size = 1,
     loss_fn    = loss_fn,
