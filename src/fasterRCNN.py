@@ -12,6 +12,7 @@ from torchvision.ops import MultiScaleRoIAlign
 from BackboneNetwork import BackboneNetwork
 from ClassConstants  import ClassConstants
 from RegionProposalNetwork import *
+from networkHead import*
 
 def rcnn_collate_fn(data):
     images = []
@@ -30,11 +31,12 @@ def rcnn_loss_fn(model_output):
 
 class FasterRCNN(nn.Module):
 
-    def __init__(self, image_size, use_built_in_rpn=False):
+    def __init__(self, image_size, use_built_in_rpn=False, use_built_in_roi_heads=True):
         super().__init__()
-        self.backbone = BackboneNetwork()
-        self.use_built_in_rpn = use_built_in_rpn
         self.image_size = image_size
+        self.use_built_in_rpn = use_built_in_rpn
+        self.use_built_in_roi_heads = use_built_in_roi_heads
+        self.backbone = BackboneNetwork()
         self.__get_feature_map_size()
         self.__create_rpn() 
         self.__create_roi_heads()
@@ -51,35 +53,10 @@ class FasterRCNN(nn.Module):
             use_built_in_rpn = self.use_built_in_rpn)
 
     def __create_roi_heads(self):
-
-        box_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=7, sampling_ratio=2)
-
-        resolution = box_roi_pool.output_size[0]
-        representation_size = 1024
-        out_channels = self.feature_map_size[1]
-        box_head = TwoMLPHead(out_channels * resolution**2, representation_size)
-
-        num_classes = len(ClassConstants.LABELS.keys())
-        representation_size = 1024
-        box_predictor = FastRCNNPredictor(representation_size, num_classes)
-
-        bbox_reg_weights = (10.0, 10.0, 5.0, 5.0)
-
-        self.roi_heads = RoIHeads(
-            box_roi_pool         = box_roi_pool,
-            box_head             = box_head,
-            box_predictor        = box_predictor,
-            # Faster R-CNN training
-            fg_iou_thresh        = 0.5,
-            bg_iou_thresh        = 0.5,
-            batch_size_per_image = 512,
-            positive_fraction    = 0.25,
-            bbox_reg_weights     = bbox_reg_weights,
-            # Faster R-CNN inference
-            score_thresh         = 0.00,
-            nms_thresh           = 0.00,
-            detections_per_img   = 100)
-
+        self.roi_heads = create_roi_heads_network(
+            feature_map_size       = self.feature_map_size,
+            use_built_in_roi_heads = self.use_built_in_roi_heads)
+        
     def to(self,device):
         super().to(device)
         self.rpn.to(device)
@@ -112,21 +89,11 @@ if __name__ == "__main__":
     import numpy as np
     import random
 
-    # import debugpy
-
-    # Allow other computers to attach to debugpy at this IP address and port.
-    # debugpy.listen(('127.0.0.1', 5678))
-
-    # Pause the program until a remote debugger is attached
-    # debugpy.wait_for_client()
-
     # Create path constants singleton
     data_manager = DataManager()
     data_manager.download_datasets()
-
     data_dir = data_manager.get_download_dir()
     PathConstants(data_dir)
-    #PathConstants('/tmp/FLIR_ADAS_v2')
 
     # Set the initial random number generator seed
     torch.manual_seed(0)
@@ -138,7 +105,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
 
     # Create Faster RCNN Network
     model = FasterRCNN(train_data[0][0].shape)
@@ -157,7 +124,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 1,
+        batch_size  = 64,
         loss_fn     = rcnn_loss_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
