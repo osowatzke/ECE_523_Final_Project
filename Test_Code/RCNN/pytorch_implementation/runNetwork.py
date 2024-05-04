@@ -47,6 +47,11 @@ def rpn_collate_fn(data):
     features = {'0' : torch.cat(features)}
     return images, features, targets
 
+def rpn_loss_fn(model_output):
+    loss_dict = model_output[1]
+    losses = sum(loss for loss in loss_dict.values())
+    return losses
+
 def roi_collate_fn(data):
     features    = []
     proposals   = []
@@ -59,6 +64,11 @@ def roi_collate_fn(data):
         targets.append(sample[3])
     features = {'0' : torch.cat(features)}
     return features, proposals, image_sizes, targets
+
+def roi_loss_fn(model_output):
+    loss_dict = model_output[1]
+    losses = sum(loss for loss in loss_dict.values())
+    return losses
 
 run_backbone = True
 
@@ -130,6 +140,7 @@ network_trainer = NetworkTrainer(
     optimizer  = optimizer,
     num_epochs = 1,
     batch_size = 1,
+    loss_fn    = rpn_loss_fn,
     collate_fn = rpn_collate_fn)
 
 network_trainer.train() 
@@ -225,6 +236,7 @@ if True:
         optimizer  = optimizer,
         num_epochs = 10,
         batch_size = 8,
+        loss_fn    = roi_loss_fn,
         collate_fn = roi_collate_fn)
 
     network_trainer.train()

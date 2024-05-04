@@ -30,6 +30,9 @@ def collate_fn(data):
         targets.append(sample[1])
     return images, targets
 
+def default_loss_fn(model_output):
+    return model_output
+
 class CustomSampler(Sampler):
     def __init__(self, indices=None):
         self.indices = indices
@@ -45,7 +48,8 @@ class NetworkTrainer:
                  model,
                  optimizer,
                  num_epochs=1,
-                 batch_size=1, 
+                 batch_size=1,
+                 loss_fn=None,
                  collate_fn=None,
                  save_period={'epoch': 1, 'batch':-1},
                  device=torch.device('cpu')):
@@ -56,9 +60,14 @@ class NetworkTrainer:
         self.optimizer = optimizer
         self.num_epochs = num_epochs
         self.batch_size = batch_size
+        self.loss_fn = loss_fn
         self.collate_fn = collate_fn
         self.device = device
         self.save_period = save_period
+
+        # Determine loss function
+        if self.loss_fn is None:
+            self.loss_fn = default_loss_fn
 
         # Initial epoch and batch number
         self.epoch = 0
@@ -282,22 +291,22 @@ class NetworkTrainer:
                 self.optimizer.zero_grad()
 
                 # Compute the total loss
-                _, loss_dict = self.model(*args)
-                losses = sum(loss for loss in loss_dict.values())
+                model_output = self.model(*args)
+                loss = self.loss_fn(model_output)
 
                 # Perform backprogation
-                losses.backward()
+                loss.backward()
                 self.optimizer.step()
 
                 # Log the loss to TensorBoard
-                writer.add_scalar('Loss/train', losses.item(), self.batch + self.epoch*num_batches)
+                writer.add_scalar('Loss/train', loss.item(), self.batch + self.epoch*num_batches)
                 writer.flush()
 
                 # Print the batch loss
-                print(f'Batch Loss ({self.batch+1}/{num_batches}): {losses.item()}')
+                print(f'Batch Loss ({self.batch+1}/{num_batches}): {loss.item()}')
 
                 # Append to array of losses
-                self.loss.append(losses.item())
+                self.loss.append(loss.item())
 
                 # Increment the batch counters
                 self.batch += 1
