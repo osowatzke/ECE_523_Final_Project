@@ -76,8 +76,8 @@ class FasterRCNN(nn.Module):
             positive_fraction    = 0.25,
             bbox_reg_weights     = bbox_reg_weights,
             # Faster R-CNN inference
-            score_thresh         = 0.05,
-            nms_thresh           = 0.5,
+            score_thresh         = 0.00,
+            nms_thresh           = 0.00,
             detections_per_img   = 100)
 
     def to(self,device):
@@ -112,6 +112,14 @@ if __name__ == "__main__":
     import numpy as np
     import random
 
+    # import debugpy
+
+    # Allow other computers to attach to debugpy at this IP address and port.
+    # debugpy.listen(('127.0.0.1', 5678))
+
+    # Pause the program until a remote debugger is attached
+    # debugpy.wait_for_client()
+
     # Create path constants singleton
     data_manager = DataManager()
     data_manager.download_datasets()
@@ -130,14 +138,14 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
     # Create Faster RCNN Network
     model = FasterRCNN(train_data[0][0].shape)
     model.to(device)
 
     # Create optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
     
     # Set the period for saving data
     # -1 will cause data not to be saved
@@ -149,7 +157,7 @@ if __name__ == "__main__":
         model       = model,
         optimizer   = optimizer,
         num_epochs  = 50,
-        batch_size  = 96,
+        batch_size  = 1,
         loss_fn     = rcnn_loss_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,

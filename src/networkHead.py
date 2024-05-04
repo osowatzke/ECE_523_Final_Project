@@ -15,6 +15,14 @@ from torchvision.models.detection.roi_heads import fastrcnn_loss
 from BoundingBoxUtilities import corners_to_centroid, centroids_to_corners
 from ClassConstants import ClassConstants
 
+from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
+from torchvision.models.detection.roi_heads import RoIHeads
+from torchvision.ops import MultiScaleRoIAlign
+
+from torch.utils.data      import DataLoader
+from CustomDataset         import CustomDataset
+from RegionProposalNetwork import *
+
 device = torch.device('cpu')
 # torch.cuda.set_device(0)
 
@@ -325,6 +333,105 @@ class headNet(nn.Module):
                     totalAcc = totalAcc + int(predOutputs[r] == tclasses_[r])
                     # print("Pred: {}, Act: {}".format(int(predOutputs[r]), tclasses_[r]))
                 print("Total accuracy is: {}%".format(totalAcc * 100 / toutputs[0].size(dim=0)))
+
+
+def create_roi_heads_network(feature_map_size, use_built_in_roi_heads=False):
+    
+    if not use_built_in_roi_heads:
+        print("WARNING: Custom ROI Heads Network has not been fully integrated")
+    
+    box_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=7, sampling_ratio=2)
+
+    resolution = box_roi_pool.output_size[0]
+    representation_size = 1024
+    out_channels = feature_map_size[1]
+    box_head = TwoMLPHead(out_channels * resolution**2, representation_size)
+
+    num_classes = len(ClassConstants.LABELS.keys())
+    representation_size = 1024
+    box_predictor = FastRCNNPredictor(representation_size, num_classes)
+
+    bbox_reg_weights = (10.0, 10.0, 5.0, 5.0)
+
+    roi_heads = RoIHeads(
+        box_roi_pool         = box_roi_pool,
+        box_head             = box_head,
+        box_predictor        = box_predictor,
+        # Faster R-CNN training
+        fg_iou_thresh        = 0.5,
+        bg_iou_thresh        = 0.5,
+        batch_size_per_image = 512,
+        positive_fraction    = 0.25,
+        bbox_reg_weights     = bbox_reg_weights,
+        # Faster R-CNN inference
+        score_thresh         = 0.05,
+        nms_thresh           = 0.5,
+        detections_per_img   = 100)
+
+    return roi_heads
+
+
+def create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads=False):
+    
+    if not use_built_in_roi_heads:                 
+        print("WARNING: Custom ROI Heads Network has not been fully integrated")
+
+    if len(rpn_dataset[0]) == 3:
+        use_built_in_rpn = True
+    else:
+        use_built_in_rpn = False
+
+    collate_fn = rpn_collate_fn(use_built_in_rpn)
+
+    roi_dataset = CustomDataset()
+    data_loader = DataLoader(rpn_dataset, batch_size=1, shuffle=False, collate_fn=collate_fn)
+                  
+    for idx, args in enumerate(data_loader):
+        feature_map = args[-2]
+        proposals = rpn(*args)[0][0]
+        image_sizes = dataset[idx][0].shape[-2:]
+        targets = dataset[idx][1]
+        roi_dataset.append((feature_map, proposals, image_sizes, targets))
+
+    return roi_dataset
+
+
+class roi_collate_fn:
+    def __init__(self, use_built_in_roi_heads=False):
+        if not use_built_in_roi_heads:
+            print("WARNING: Custom ROI Heads Network has not been fully integrated")
+        self._collate_fn = self._builtin_fn
+
+    def __call__(self, data):
+        return self._collate_fn(data)
+        
+    def _builtin_fn(self, data):
+        features    = []
+        proposals   = []
+        image_sizes = []
+        targets     = []
+        for sample in data:
+            features.append(sample[0])
+            proposals.append(sample[1])
+            image_sizes.append(sample[2])
+            targets.append(sample[3])
+        features = {'0' : torch.cat(features)}
+        return features, proposals, image_sizes, targets
+
+
+class roi_loss_fn:
+    def __init__(self, use_built_in_roi_heads=False):
+        if not use_built_in_roi_heads:
+            print("WARNING: Custom ROI Heads Network has not been fully integrated")
+        self._loss_fn = self._builtin_fn
+
+    def __call__(self, model_output):
+        return self._loss_fn(model_output)
+    
+    def _builtin_fn(self, model_output):
+        loss_dict = model_output[1]
+        losses = sum(loss for loss in loss_dict.values())
+        return losses
 
 
 if __name__ == "__main__":
