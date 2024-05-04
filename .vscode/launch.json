@@ -12,7 +12,7 @@
             "purpose": ["debug-in-terminal"],
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": true
         }
     ]
 }
