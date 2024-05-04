@@ -105,7 +105,7 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
     # Create Faster RCNN Network
     model = FasterRCNN(train_data[0][0].shape)
@@ -118,13 +118,17 @@ if __name__ == "__main__":
     # -1 will cause data not to be saved
     save_period = {'epoch' : 1, 'batch' : -1}
     
+    # Run subfolder
+    run_folder = 'custom_faster_rcnn'
+
     # Create network trainer
     net_trainer = NetworkTrainer(
         data        = train_data, 
         model       = model,
         optimizer   = optimizer,
+        run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 64,
+        batch_size  = 1,
         loss_fn     = rcnn_loss_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,

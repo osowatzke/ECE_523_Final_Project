@@ -1,10 +1,11 @@
 from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torch.utils.tensorboard import SummaryWriter
+from SummaryWriter import SummaryWriter
 from ClassConstants import ClassConstants
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import Sampler
 from datetime import datetime
+from DataManager import DataManager
 from PathConstants import PathConstants
 from FlirDataset import FlirDataset
 import numpy as np
@@ -30,6 +31,10 @@ def collate_fn(data):
         targets.append(sample[1])
     return images, targets
 
+def loss_fn(loss_dict):
+    losses = sum(loss for loss in loss_dict.values())
+    return losses
+
 def default_loss_fn(model_output):
     return model_output
 
@@ -47,6 +52,7 @@ class NetworkTrainer:
                  data,
                  model,
                  optimizer,
+                 run_folder,
                  num_epochs=1,
                  batch_size=1,
                  loss_fn=None,
@@ -64,6 +70,9 @@ class NetworkTrainer:
         self.collate_fn = collate_fn
         self.device = device
         self.save_period = save_period
+
+        # Determine the number of batches
+        self.num_batches = math.ceil(len(self.data)/self.batch_size)
 
         # Determine loss function
         if self.loss_fn is None:
@@ -85,8 +94,11 @@ class NetworkTrainer:
         self.loss = []
 
         # Create run directory for outputs
-        self.get_run_dir()
+        self.get_run_dir(run_folder)
         os.makedirs(self.run_dir)
+
+        # Create TensorBoard SummaryWriter instance
+        self.summary_writer = SummaryWriter(self.run_dir)
         
     # Function gets the initial state of the random number generator
     def get_init_rng_state(self):
@@ -166,11 +178,62 @@ class NetworkTrainer:
                 except:
                     print("Failed to remove checkpoint file %s" % (file))
 
+    # Function parses a run directory
+    def parse_run_dir(self, run_dir):
+        
+        # Get contents of run directory
+        dir_contents = os.listdir(run_dir)
+
+        # Get all files in run directory
+        file_names = []
+        for name in dir_contents:
+            name = os.path.join(run_dir, name)
+            if os.path.isfile(name):
+                file_names.append(os.path.basename(name))
+
+        # Match all checkpoint files
+        r = re.compile('^cp__epoch_(\\d+)_batch_(\\d+)\\.pth$')
+        matches = []
+        for file_name in file_names:
+            m = r.match(file_name)
+            if m is not None:
+                matches.append(m)
+
+        # Extra meta data from log file name
+        checkpoint_files = [m.group(0) for m in matches]
+        epoch = np.array([int(m.group(1)) for m in matches])
+        batch = np.array([int(m.group(2)) for m in matches])
+
+        # Get the latest checkpoint file and the corresponding loop iteration
+        num_iter = batch + epoch * self.num_batches
+        max_iter = num_iter.max()
+        max_idx = np.where(num_iter == max_iter)[0][0]
+        checkpoint_file = checkpoint_files[max_idx]
+        checkpoint_file = os.path.join(run_dir, checkpoint_file)
+
+        # Get the tensor board event file
+        r = re.compile('^events.out.tfevents.*$')
+        matches = []
+        for file_name in file_names:
+            m = r.match(file_name)
+            if m is not None:
+                matches.append(m)
+        event_file = matches[0].group(0)
+        event_file = os.path.join(run_dir, event_file)
+
+        return checkpoint_file, event_file, max_iter
+
     # Function loads the training state
-    def load_state(self, checkpoint):
+    def load_state(self, run_dir):
+
+        # Get checkpoint file and event file from run directory
+        checkpoint_file, event_file, num_events = self.parse_run_dir(run_dir)
+
+        # Add events to tensor board
+        self.summary_writer.load_state(event_file, num_events)
 
         # Load the checkpoint file
-        state = torch.load(checkpoint)
+        state = torch.load(checkpoint_file)
 
         # Set the epoch and batch number
         self.epoch = state['epoch']
@@ -192,26 +255,19 @@ class NetworkTrainer:
         self.load_init_rng_state()
          
     # Function computes the path to the run directory
-    def get_run_dir(self):
+    def get_run_dir(self, run_folder):
         class_path = os.path.dirname(__file__)
+        run_root_dir = os.path.join(class_path,'..','runs',run_folder)
+        run_root_dir = os.path.abspath(run_root_dir)
         current_time = datetime.now()
         current_time = current_time.strftime("%Y-%m-%d_%H-%M-%S")
-        self.run_dir = os.path.join(class_path,'run',f"run__{current_time}")
+        self.run_dir = os.path.join(run_root_dir,f"run__{current_time}")
         
     # Function defines the training loop
     def train(self):
 
-        # Create TensorBoard SummaryWriter instance
-        log_dir = os.path.join('/tmp/runs',os.path.basename(self.run_dir))
-        #log_dir = os.path.dirname(__file__)
-        #log_dir = os.path.join(log_dir,os.path.basename(self.run_dir))
-        writer = SummaryWriter(log_dir)
-
         # Save the initial random generator state
         self.get_init_rng_state()
-
-        # Determine the number of batches
-        num_batches = math.ceil(len(self.data)/self.batch_size)
 
         # Create custom sampler
         sampler = CustomSampler()
@@ -299,11 +355,11 @@ class NetworkTrainer:
                 self.optimizer.step()
 
                 # Log the loss to TensorBoard
-                writer.add_scalar('Loss/train', loss.item(), self.batch + self.epoch*num_batches)
-                writer.flush()
+                self.summary_writer.add_scalar('Loss/train', loss.item(), self.batch + self.epoch*self.num_batches)
+                self.summary_writer.flush()
 
                 # Print the batch loss
-                print(f'Batch Loss ({self.batch+1}/{num_batches}): {loss.item()}')
+                print(f'Batch Loss ({self.batch+1}/{self.num_batches}): {loss.item()}')
 
                 # Append to array of losses
                 self.loss.append(loss.item())
@@ -323,22 +379,17 @@ class NetworkTrainer:
         self.save_state()
 
         # Clear any pending events
-        writer.flush()
-        writer.close()
+        self.summary_writer.flush()
+        self.summary_writer.close()
       
 # Code to run if file is called directly
 if __name__ == "__main__":
 
-    # Determine if local copy of data needs to be made
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-l','--make_local_copy', action='store_true')
-    args = parser.parse_args()
-
-    # Create singleton
-    PathConstants = PathConstants()
-    if args.make_local_copy:
-        PathConstants.source_from_local_copy()
+    # Download data and create path constants singleton
+    data_manager = DataManager('train')
+    data_manager.download_datasets()
+    data_dir = data_manager.get_download_dir()
+    PathConstants(data_dir)
 
     # Set the initial random number generator seed
     torch.manual_seed(0)
@@ -360,25 +411,30 @@ if __name__ == "__main__":
 
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : -1}
+    save_period = {'epoch' : 1, 'batch' : 1}
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=4, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=10, device=device)
+
+    # Run subfolder
+    run_folder = 'built_in_faster_rcnn'
 
     # Create network trainer
     net_trainer = NetworkTrainer(
         data        = train_data, 
         model       = model,
         optimizer   = optimizer,
+        run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 16,
+        batch_size  = 1,
+        loss_fn     = loss_fn,
         collate_fn  = collate_fn,
         save_period = save_period,
         device      = device
     )
 
     # Uncomment and adjust path to resume training
-    # net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run','run__2024-04-25_20-19-58','cp__2024-04-25_20-20-02.pth'))
+    # net_trainer.load_state(os.path.join(os.path.dirname(__file__),'run','run__2024-05-04_14-52-14'))
     
     # Train model
     net_trainer.train()
