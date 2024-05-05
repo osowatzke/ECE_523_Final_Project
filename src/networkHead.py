@@ -365,7 +365,7 @@ def create_roi_heads_network(feature_map_size, use_built_in_roi_heads=False):
         bbox_reg_weights     = bbox_reg_weights,
         # Faster R-CNN inference
         score_thresh         = 0.05,
-        nms_thresh           = 0.5,
+        nms_thresh           = 0.3,
         detections_per_img   = 100)
 
     return roi_heads
