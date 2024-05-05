@@ -12,7 +12,8 @@
             "purpose": ["debug-in-terminal"],
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "args": ["--scale_class_loss", "10"]
         }
     ]
 }
