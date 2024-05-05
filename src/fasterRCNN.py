@@ -11,8 +11,11 @@ from torchvision.ops import MultiScaleRoIAlign
 
 from BackboneNetwork import BackboneNetwork
 from ClassConstants  import ClassConstants
-from RegionProposalNetwork import *
-from networkHead import*
+from RegionProposalNetwork import RegionProposalNetwork
+
+from fasterRCNNloss import fasterRCNNloss
+
+import argparse
 
 def rcnn_collate_fn(data):
     images = []
@@ -24,21 +27,18 @@ def rcnn_collate_fn(data):
     images = images.reshape((len(data),) + data[0][0].shape)
     return images, targets
 
-def rcnn_loss_fn(model_output):
-    loss_dict = model_output[1]
-    losses = sum(loss for loss in loss_dict.values())
-    return losses
-
 class FasterRCNN(nn.Module):
 
-    def __init__(self, image_size, use_built_in_rpn=False, use_built_in_roi_heads=True):
+    def __init__(self, image_size, use_built_in_rpn=False):
         super().__init__()
-        self.image_size = image_size
-        self.use_built_in_rpn = use_built_in_rpn
-        self.use_built_in_roi_heads = use_built_in_roi_heads
         self.backbone = BackboneNetwork()
+        self.use_built_in_rpn = use_built_in_rpn
+        self.image_size = image_size
         self.__get_feature_map_size()
-        self.__create_rpn() 
+        if self.use_built_in_rpn:
+            self.__create_built_in_rpn()
+        else:
+            self.__create_user_rpn()
         self.__create_roi_heads()
     
     def __get_feature_map_size(self):
@@ -46,17 +46,64 @@ class FasterRCNN(nn.Module):
         output = self.backbone(input)
         self.feature_map_size = output.shape
 
-    def __create_rpn(self):
-        self.rpn = create_region_proposal_network(
-            image_size       = self.image_size,
-            feature_map_size = self.feature_map_size,
-            use_built_in_rpn = self.use_built_in_rpn)
+    def __create_user_rpn(self):
+        self.rpn = RegionProposalNetwork(
+            image_size = self.image_size,
+            feature_map_size = self.feature_map_size
+        )
+
+    def __create_built_in_rpn(self):
+
+        anchor_box_sizes = ((32,64,128),)
+        aspect_ratios = ((0.5,1.0,2.0),)
+        anchor_generator = AnchorGenerator(anchor_box_sizes, aspect_ratios)
+        num_anchors = len(anchor_box_sizes[0]) * len(aspect_ratios[0])
+
+        rpn_head = torch_rpn.RPNHead(self.feature_map_size[1], num_anchors)
+
+        self.rpn = torch_rpn.RegionProposalNetwork(
+            anchor_generator=anchor_generator,
+            head=rpn_head,
+            fg_iou_thresh=0.5,
+            bg_iou_thresh=0.3,
+            batch_size_per_image=128,
+            positive_fraction=0.5,
+            pre_nms_top_n ={'training': 512, 'testing': 512},
+            post_nms_top_n={'training': 128, 'testing': 128},
+            nms_thresh=0.7,
+            score_thresh=0.5)
 
     def __create_roi_heads(self):
-        self.roi_heads = create_roi_heads_network(
-            feature_map_size       = self.feature_map_size,
-            use_built_in_roi_heads = self.use_built_in_roi_heads)
-        
+
+        box_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=7, sampling_ratio=2)
+
+        resolution = box_roi_pool.output_size[0]
+        representation_size = 1024
+        out_channels = self.feature_map_size[1]
+        box_head = TwoMLPHead(out_channels * resolution**2, representation_size)
+
+        num_classes = len(ClassConstants.LABELS.keys())
+        representation_size = 1024
+        box_predictor = FastRCNNPredictor(representation_size, num_classes)
+
+        bbox_reg_weights = (10.0, 10.0, 5.0, 5.0)
+
+        self.roi_heads = RoIHeads(
+            box_roi_pool         = box_roi_pool,
+            box_head             = box_head,
+            box_predictor        = box_predictor,
+            # Faster R-CNN training
+            fg_iou_thresh        = 0.5,
+            bg_iou_thresh        = 0.5,
+            batch_size_per_image = 512,
+            positive_fraction    = 0.25,
+            bbox_reg_weights     = bbox_reg_weights,
+            # Faster R-CNN inference
+            score_thresh         = 0.05,
+            nms_thresh           = 0.5,
+            detections_per_img   = 100)
+
+
     def to(self,device):
         super().to(device)
         self.rpn.to(device)
@@ -92,8 +139,10 @@ if __name__ == "__main__":
     # Create path constants singleton
     data_manager = DataManager()
     data_manager.download_datasets()
+
     data_dir = data_manager.get_download_dir()
     PathConstants(data_dir)
+    #PathConstants('/tmp/FLIR_ADAS_v2')
 
     # Set the initial random number generator seed
     torch.manual_seed(0)
@@ -105,34 +154,40 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
     # Create Faster RCNN Network
+    print(train_data[0][0].shape)
     model = FasterRCNN(train_data[0][0].shape)
     model.to(device)
 
     # Create optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
     
     # Set the period for saving data
     # -1 will cause data not to be saved
     save_period = {'epoch' : 1, 'batch' : -1}
-    
-    # Run subfolder
-    run_folder = 'custom_faster_rcnn'
 
+    # Loss function
+    parser = argparse.ArgumentParser('-s', '--scale_class_loss')
+    args = parser.parse_args()
+    if args.scale_class_loss:
+        rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
+    else:
+        rcnn_loss_fn = fasterRCNNloss({"loss_objectness": 1, "loss_rpn_box_reg": 1, "loss_classifier": 1, "loss_box_reg": 1})
+    
     # Create network trainer
     net_trainer = NetworkTrainer(
         data        = train_data, 
         model       = model,
         optimizer   = optimizer,
-        run_folder  = run_folder,
         num_epochs  = 50,
         batch_size  = 96,
         loss_fn     = rcnn_loss_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
-        device      = device
+        device      = device,
+        run_folder = r"C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\runs"
     )
 
     net_trainer.train()

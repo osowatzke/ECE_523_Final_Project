@@ -121,10 +121,10 @@ class RegionProposalNetwork(nn.Module):
             
             # Function computes the loss
             bbox_loss, cls_loss = self.compute_loss(bbox_off_pred, bbox_off_truth, cls_pred, cls_truth)
-            
+
             losses = {
-                'bbox' : bbox_loss,
-                'cls'  : cls_loss
+                "loss_objectness": cls_loss,
+                "loss_rpn_box_reg": bbox_loss,
             }
 
         return bbox_pred, losses
