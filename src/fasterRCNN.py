@@ -155,7 +155,7 @@ if __name__ == "__main__":
     
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : 1}
+    save_period = {'epoch' : 1, 'batch' : -1}
 
     # Loss function
     rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
