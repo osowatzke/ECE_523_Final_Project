@@ -66,10 +66,11 @@ class NetworkTrainer:
                  run_folder,
                  num_epochs=1,
                  batch_size=1,
+                 valid_data=None,
                  collate_fn=None,
                  loss_fn=None,
                  log_fn=None,
-                 save_period={'epoch': 1, 'batch':-1},
+                 save_period={'epoch': 1, 'batch': -1},
                  device=torch.device('cpu')):
         
         # Save inputs to class constructor
@@ -78,6 +79,7 @@ class NetworkTrainer:
         self.optimizer = optimizer
         self.num_epochs = num_epochs
         self.batch_size = batch_size
+        self.valid_data = valid_data
         self.collate_fn = collate_fn
         self.loss_fn = loss_fn
         self.log_fn = log_fn
@@ -86,6 +88,9 @@ class NetworkTrainer:
 
         # Determine the number of batches
         self.num_batches = math.ceil(len(self.data)/self.batch_size)
+
+        # Determine the number of batches in the validation set
+        self.num_valid_batches = math.ceil(len(self.valid_data)/self.batch_size)
 
         # Determine loss function
         if self.loss_fn is None:
@@ -279,7 +284,27 @@ class NetworkTrainer:
         current_time = datetime.now()
         current_time = current_time.strftime("%Y-%m-%d_%H-%M-%S")
         self.run_dir = os.path.join(run_root_dir,f"run__{current_time}")
-        
+
+    # Function computes the validation loss
+    def compute_validation_loss(self):        
+
+        # Compute validation loss
+        if self.valid_data is not None:
+
+            running_loss = 0
+            with torch.no_grad():
+                for data in self.valid_data_loader:
+                    model_output = self.model(*data)
+                    loss = self.loss_fn(model_output)
+                    running_loss += loss.item()
+                
+            # Compute average loss
+            avg_loss = running_loss/self.num_valid_batches
+
+            # Log the loss to TensorBoard
+            idx = self.epoch*self.num_batches
+            self.summary_writer.add_scalar('Loss/valid', avg_loss, idx)
+
     # Function defines the training loop
     def train(self):
 
@@ -291,6 +316,10 @@ class NetworkTrainer:
 
         # Create data loader object
         data_loader = DataLoader(self.data, batch_size=self.batch_size, collate_fn=self.collate_fn, shuffle=False, sampler=sampler)
+
+        # Create data loader object
+        if self.valid_data is not None:
+            self.valid_data_loader = DataLoader(self.valid_data, batch_size=self.batch_size, collate_fn=self.collate_fn, shuffle=False)
 
         # Put the model in training model
         self.model.train()
@@ -387,12 +416,15 @@ class NetworkTrainer:
                 # Increment the batch counters
                 self.batch += 1
                 batch_count += 1
-
+            
             # Reset the batch number
             self.batch = 0
 
             # Increment the epoch counter
             epoch_count += 1
+
+            # Compute the validation loss
+            self.compute_validation_loss()
 
         # Save data from the end of the final epoch
         self.epoch = self.num_epochs
@@ -433,20 +465,22 @@ if __name__ == "__main__":
     # -1 will cause data not to be saved
     save_period = {'epoch' : 1, 'batch' : -1}
 
-    # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, device=device)
+    # Create datasets object
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device, num_images=2)
+    valid_data = FlirDataset(PathConstants.VAL_DIR, device=device, num_images=2)
 
     # Run subfolder
     run_folder = 'built_in_faster_rcnn'
 
     # Create network trainer
     net_trainer = NetworkTrainer(
-        data        = train_data, 
+        data        = train_data,
+        valid_data  = valid_data,
         model       = model,
         optimizer   = optimizer,
         run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 32,
+        batch_size  = 1,
         log_fn      = custom_log_fn,
         loss_fn     = loss_fn,
         collate_fn  = collate_fn,

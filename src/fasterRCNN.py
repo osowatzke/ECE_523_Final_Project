@@ -145,6 +145,10 @@ if __name__ == "__main__":
         dir              = PathConstants.TRAIN_DIR,
         compute_mean_std = args.normalize_images,
         device           = device)
+    
+    valid_data = FlirDataset(
+        dir              = PathConstants.VAL_DIR,
+        device           = device)
 
     image_size = train_data[0][0].shape
 
@@ -177,6 +181,7 @@ if __name__ == "__main__":
     # Create network trainer
     net_trainer = NetworkTrainer(
         data        = train_data, 
+        valid_data  = valid_data,
         model       = model,
         optimizer   = optimizer,
         run_folder  = run_folder,
