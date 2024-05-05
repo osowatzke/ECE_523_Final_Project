@@ -13,6 +13,7 @@ import os
 parser = argparse.ArgumentParser()
 parser.add_argument('-w', '--loss_weights', nargs=2, default=[1,1], type=float)
 parser.add_argument('-l', '--learning_rate', default=1e-3, type=float)
+parser.add_argument('-n', '--num_images', default=-1, type=int)
 args = parser.parse_args()
 
 # Determine the device
@@ -37,7 +38,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create input dataset
-dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=192, device=device)
+dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=args.num_images, device=device)
 
 # Create backbone network
 backbone = BackboneNetwork()
