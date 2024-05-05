@@ -34,6 +34,7 @@ dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
 # Create backbone network
 backbone = BackboneNetwork()
+backbone.to(device)
 
 # Create RPN dataset
 rpn_dataset = create_rpn_dataset(backbone, dataset, use_built_in_rpn)
