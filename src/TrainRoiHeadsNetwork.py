@@ -46,6 +46,9 @@ backbone.to(device)
 # Create RPN dataset
 rpn_dataset = create_rpn_dataset(backbone, dataset, use_built_in_rpn, device)
 
+# Clear unneeded things from GPU memory
+del backbone
+
 # Get sizes of images and feature maps
 image_size = dataset[0][0].shape
 if use_built_in_rpn:
@@ -70,7 +73,6 @@ roi_dataset = create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_hea
 
 # Clear unneeded things from GPU memory
 del dataset
-del backbone
 del rpn
 del rpn_dataset
 
