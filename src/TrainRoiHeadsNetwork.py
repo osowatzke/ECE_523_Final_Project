@@ -81,6 +81,7 @@ if torch.cuda.is_available():
 # Create ROI Heads network
 torch.manual_seed(0)
 roi_heads = create_roi_heads_network(feature_map_size, use_built_in_roi_heads)
+roi_heads.to(device)
 roi_heads.train()
 
 # Train the RPN network
