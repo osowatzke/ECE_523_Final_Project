@@ -41,6 +41,14 @@ def default_loss_fn(model_output):
 def default_log_fn(loss, _):
     return {'Loss/train' : loss}
 
+def custom_log_fn(loss, model_output):
+    loss_dict = model_output
+    return {'Loss/train'            : loss,
+            'Objectness_Loss/train' : loss_dict['loss_objectness'],
+            'RPN_Box_Loss/train'    : loss_dict['loss_rpn_box_reg'],
+            'Classifier_Loss/train' : loss_dict['loss_classifier'],
+            'Box_Loss/train'        : loss_dict['loss_box_reg']}
+
 class CustomSampler(Sampler):
     def __init__(self, indices=None):
         self.indices = indices
@@ -419,14 +427,14 @@ if __name__ == "__main__":
     model.to(device)
 
     # Create optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-6, momentum=0)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
 
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : 1}
+    save_period = {'epoch' : 1, 'batch' : -1}
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=10, device=device)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, device=device)
 
     # Run subfolder
     run_folder = 'built_in_faster_rcnn'
@@ -438,7 +446,8 @@ if __name__ == "__main__":
         optimizer   = optimizer,
         run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 1,
+        batch_size  = 16,
+        log_fn      = custom_log_fn,
         loss_fn     = loss_fn,
         collate_fn  = collate_fn,
         save_period = save_period,
