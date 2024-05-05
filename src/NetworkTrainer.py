@@ -446,7 +446,7 @@ if __name__ == "__main__":
         optimizer   = optimizer,
         run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 16,
+        batch_size  = 32,
         log_fn      = custom_log_fn,
         loss_fn     = loss_fn,
         collate_fn  = collate_fn,
