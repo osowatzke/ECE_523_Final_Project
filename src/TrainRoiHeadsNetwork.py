@@ -104,6 +104,11 @@ loss_fn = roi_loss_fn(weights, use_built_in_roi_heads)
 # Train ROI heads network
 run_folder = 'roi_heads_network'
 
+print(roi_dataset[0][0].get_device())
+print(roi_dataset[0][1])
+print(roi_dataset[0][2])
+print(roi_dataset[0][3])
+
 network_trainer = NetworkTrainer(
     data       = roi_dataset,
     model      = roi_heads,
