@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import os
 import cv2
+from ClassConstants import ClassConstants
 
 class FlirDataset(Dataset):
     def __init__(self, dir, downsample=1, num_images=-1, compute_mean_std=False, device=None):
@@ -102,18 +103,19 @@ if __name__ == "__main__":
 
     dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=10)
 
-    img = dataset[0][0]
-    targets = dataset[0][1]
+    img = dataset[1][0]
+    targets = dataset[1][1]
     boxes = targets['boxes']
     labels = targets['labels']
 
     img_data_all = np.uint8(img.permute(1, 2, 0).numpy())
     plt.imshow(img_data_all)
-    for gt_box in boxes:
+    for idx, gt_box in enumerate(boxes):
         x = gt_box[0]
         y = gt_box[1]
         w = gt_box[2] - x
         h = gt_box[3] - y
         rect = patches.Rectangle((x, y), w, h, color='red', linewidth=3, fill=False)
         plt.gca().add_patch(rect)
+        plt.text(x,y,list(ClassConstants.LABELS.keys())[labels[idx]],color='white',bbox=dict(facecolor='red', edgecolor='red', boxstyle="Square, pad=0")) # backgroundcolor='red',
     plt.show()
