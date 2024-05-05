@@ -36,6 +36,36 @@ class FlirDataset(Dataset):
                 self.json_parser.gt_boxes_all[img_idx] = boxes
             self.images.append(img)
 
+        # Compute mean and standard deviation
+        self.__compute_mean()
+        self.__compute_std()
+
+        # Convert from numpy arrays into tensors
+        self.mean = torch.tensor(self.mean, dtype=torch.float32, device=device)
+        self.std = torch.tensor(self.std, dtype=torch.float32, device=device)
+
+    def __compute_mean(self):
+        num_images = len(self.images)
+        image_shape = self.images[0].shape
+        num_cells = np.prod(np.array(image_shape[:2]))
+        num_cells = num_images * num_cells
+        img_sum = np.zeros(self.images[0].shape[2])
+        for img in self.images:
+            img = np.float64(img)
+            img_sum += np.sum(img,axis=(0,1))
+        self.mean = img_sum/num_cells
+        
+    def __compute_std(self):
+        num_images = len(self.images)
+        image_shape = self.images[0].shape
+        num_cells = np.prod(np.array(image_shape[:2]))
+        num_cells = num_images * num_cells
+        img_sum = np.zeros(self.images[0].shape[2])
+        for img in self.images:
+            img = np.float64(img)
+            img_sum += np.sum(np.square(img - self.mean),axis=(0,1))
+        self.std = np.sqrt(img_sum/num_cells)
+
     def __len__(self):
         return len(self.images)
     
@@ -64,7 +94,7 @@ if __name__ == "__main__":
     data_dir = data_manager.get_download_dir()
     PathConstants(data_dir)
 
-    dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=1)
+    dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=10)
 
     img = dataset[0][0]
     targets = dataset[0][1]
