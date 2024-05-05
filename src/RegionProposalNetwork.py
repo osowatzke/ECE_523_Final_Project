@@ -10,7 +10,7 @@ from   torchvision.models.detection.anchor_utils import AnchorGenerator
 from   torchvision.models.detection.image_list import ImageList
 
 from BackboneNetwork import *
-from CustomDataset   import CustomDataset
+from RegionProposalDataset import RegionProposalDataset
 
 import AnchorBoxUtilities   as anchor_utils
 import BoundingBoxUtilities as bbox_utils
@@ -312,8 +312,8 @@ def create_region_proposal_network(image_size, feature_map_size, use_built_in_rp
     return rpn
 
 
-def create_rpn_dataset(backbone, dataset, use_built_in_rpn=False):
-    rpn_dataset = CustomDataset()
+def create_rpn_dataset(backbone, dataset, use_built_in_rpn=False, device=None):
+    rpn_dataset = RegionProposalDataset(use_built_in_rpn=use_built_in_rpn, device=device)
     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=backbone_collate_fn)
     for image, targets in data_loader:
         feature_map = backbone(image)

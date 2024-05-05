@@ -37,7 +37,7 @@ backbone = BackboneNetwork()
 backbone.to(device)
 
 # Create RPN dataset
-rpn_dataset = create_rpn_dataset(backbone, dataset, use_built_in_rpn)
+rpn_dataset = create_rpn_dataset(backbone, dataset, use_built_in_rpn, device)
 
 # Get sizes of images and feature maps
 image_size = dataset[0][0].shape

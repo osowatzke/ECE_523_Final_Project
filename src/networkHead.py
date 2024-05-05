@@ -20,7 +20,7 @@ from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.ops import MultiScaleRoIAlign
 
 from torch.utils.data      import DataLoader
-from CustomDataset         import CustomDataset
+from RoiHeadsDataset       import RoiHeadsDataset
 from RegionProposalNetwork import *
 
 device = torch.device('cpu')
@@ -371,7 +371,7 @@ def create_roi_heads_network(feature_map_size, use_built_in_roi_heads=False):
     return roi_heads
 
 
-def create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads=False):
+def create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads=False, device=None):
     
     if not use_built_in_roi_heads:                 
         print("WARNING: Custom ROI Heads Network has not been fully integrated")
@@ -383,7 +383,7 @@ def create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads=False):
 
     collate_fn = rpn_collate_fn(use_built_in_rpn)
 
-    roi_dataset = CustomDataset()
+    roi_dataset = RoiHeadsDataset(device)
     data_loader = DataLoader(rpn_dataset, batch_size=1, shuffle=False, collate_fn=collate_fn)
                   
     for idx, args in enumerate(data_loader):

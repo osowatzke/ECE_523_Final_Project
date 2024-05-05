@@ -37,14 +37,14 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create input dataset
-dataset = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
 # Create backbone network
 backbone = BackboneNetwork()
 backbone.to(device)
 
 # Create RPN dataset
-rpn_dataset = create_rpn_dataset(backbone, dataset, use_built_in_rpn)
+rpn_dataset = create_rpn_dataset(backbone, dataset, use_built_in_rpn, device)
 
 # Get sizes of images and feature maps
 image_size = dataset[0][0].shape
@@ -66,7 +66,7 @@ rpn.load_state_dict(state_dict['model_state'])
 
 # Create ROI Heads dataset
 rpn.eval()
-roi_dataset = create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads)
+roi_dataset = create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads, device)
 
 # Clear unneeded things from GPU memory
 del dataset
