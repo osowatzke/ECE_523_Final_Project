@@ -9,7 +9,7 @@ import os
 import cv2
 
 class FlirDataset(Dataset):
-    def __init__(self, dir, downsample=1, num_images=-1, device=None):
+    def __init__(self, dir, downsample=1, num_images=-1, compute_mean_std=False, device=None):
         file_name = os.path.join(dir,'index.json')
         self.json_parser = JsonParser(file_name)
         self.data_dir = os.path.join(dir,'data')
@@ -36,13 +36,19 @@ class FlirDataset(Dataset):
                 self.json_parser.gt_boxes_all[img_idx] = boxes
             self.images.append(img)
 
-        # Compute mean and standard deviation
-        self.__compute_mean()
-        self.__compute_std()
+        if compute_mean_std:
+            
+            # Compute mean and standard deviation
+            self.__compute_mean()
+            self.__compute_std()
 
-        # Convert from numpy arrays into tensors
-        self.mean = torch.tensor(self.mean, dtype=torch.float32, device=device)
-        self.std = torch.tensor(self.std, dtype=torch.float32, device=device)
+            # Convert from numpy arrays into tensors
+            self.mean = torch.tensor(self.mean, dtype=torch.float32, device=device)
+            self.std = torch.tensor(self.std, dtype=torch.float32, device=device)
+        
+        else:
+            self.mean = None
+            self.std = None
 
     def __compute_mean(self):
         num_images = len(self.images)
@@ -59,7 +65,7 @@ class FlirDataset(Dataset):
         num_images = len(self.images)
         image_shape = self.images[0].shape
         num_cells = np.prod(np.array(image_shape[:2]))
-        num_cells = num_images * num_cells
+        num_cells = num_images * np.double(num_cells)
         img_sum = np.zeros(self.images[0].shape[2])
         for img in self.images:
             img = np.float64(img)

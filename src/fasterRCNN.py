@@ -72,7 +72,7 @@ class FasterRCNN(nn.Module):
         self.rpn.to(device)
 
     def forward(self, images, targets=None):
-        if self.normalize_images():
+        if self.normalize_images:
             image_mean = self.image_mean[None, :, None, None]
             image_std = self.image_std[None, :, None, None]
             images = (images - image_mean)/image_std
@@ -103,6 +103,12 @@ if __name__ == "__main__":
     import numpy as np
     import random
 
+    # Parse optional input arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--scale_class_loss', default=1)
+    parser.add_argument('-n', '--normalize_images', action='store_true')
+    args = parser.parse_args()
+
     # Create path constants singleton
     data_manager = DataManager()
     data_manager.download_datasets()
@@ -119,10 +125,20 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    train_data = FlirDataset(
+        dir              = PathConstants.TRAIN_DIR,
+        compute_mean_std = args.normalize_images,
+        device           = device)
+
+    image_size = train_data[0][0].shape
 
     # Create Faster RCNN Network
-    model = FasterRCNN(train_data[0][0].shape)
+    model = FasterRCNN(
+        image_size       = image_size,
+        normalize_images = args.normalize_images,
+        image_mean       = train_data.mean,
+        image_std        = train_data.std)
+    
     model.to(device)
 
     # Create optimizer
@@ -133,13 +149,7 @@ if __name__ == "__main__":
     save_period = {'epoch' : 1, 'batch' : -1}
 
     # Loss function
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--scale_class_loss')
-    args = parser.parse_args()
-    if args.scale_class_loss:
-        rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
-    else:
-        rcnn_loss_fn = fasterRCNNloss({"loss_objectness": 1, "loss_rpn_box_reg": 1, "loss_classifier": 1, "loss_box_reg": 1})
+    rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
     
     # Run subfolder
     run_folder = 'custom_faster_rcnn'
