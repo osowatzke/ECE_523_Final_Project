@@ -169,7 +169,8 @@ if __name__ == "__main__":
     save_period = {'epoch' : 1, 'batch' : -1}
 
     # Loss function
-    parser = argparse.ArgumentParser('-s', '--scale_class_loss')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--scale_class_loss', action='store_true')
     args = parser.parse_args()
     if args.scale_class_loss:
         rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
