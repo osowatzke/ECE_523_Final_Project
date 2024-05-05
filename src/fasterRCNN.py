@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
     # Parse optional input arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--scale_class_loss', default=1, type=int)
+    parser.add_argument('-w', '--loss_weights', nargs=4, default=[1,1,1,1], type=int)
     parser.add_argument('-n', '--normalize_images', action='store_true')
     parser.add_argument('-b', '--batch_size', default=96, type=int)
     args = parser.parse_args()
@@ -158,7 +158,11 @@ if __name__ == "__main__":
     save_period = {'epoch' : 1, 'batch' : -1}
 
     # Loss function
-    rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
+    rcnn_loss_fn = fasterRCNNloss({
+        "loss_objectness"  : args.loss_weights[0],
+        "loss_rpn_box_reg" : args.loss_weights[1],
+        "loss_classifier"  : args.loss_weights[2],
+        "loss_box_reg"     : args.loss_weights[3]})
     
     # Run subfolder
     run_folder = 'custom_faster_rcnn'
