@@ -15,53 +15,45 @@ def collate_fn(data):
         targets.append(sample[1])
     return images, targets
 
-def get_detection_metrics(model, dataset, min_score=0, batch_size=1, collate_fn=None):
-    
+def get_model_outputs(model, dataset, batch_size=1, collate_fn=None):
+
     # Create Data Loader Object
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn)
 
-    # List of predictions and targets
-    '''
+    # Create list of model predictions
     predictions = []
+    for images, _ in dataloader:
+        predictions.extend(model(images))
+
+    return predictions
+
+def get_targets(dataset):
     targets = []
-    '''
+    for idx in range(len(dataset)):
+        targets.append(dataset[idx][1])
+    return targets
+
+def get_iou(predictions, targets, min_score=0):
+    
+    # Filter model predictions
+    updated_predictions = []
+    for idx in range(len(predictions)):
+        boxes = predictions[idx]['boxes']
+        labels = predictions[idx]['labels']
+        scores = predictions[idx]['scores']
+        boxes  = boxes[scores > min_score]
+        labels = labels[scores > min_score]
+        scores = scores[scores > min_score]
+        updated_predictions.append({
+            'boxes'  : boxes,
+            'labels' : labels,
+            'scores' : scores})
 
     metric = IntersectionOverUnion()
 
-    # Run model
-    for image, targets in dataloader:
-        predictions = model(image)
-        for idx in range(len(predictions)):
-            boxes = predictions[idx]['boxes']
-            labels = predictions[idx]['labels']
-            scores = predictions[idx]['scores']
-            boxes  = boxes[scores > min_score]
-            labels = labels[scores > min_score]
-            scores = scores[scores > min_score]
-            predictions[idx]['boxes'] = boxes
-            predictions[idx]['labels'] = labels
-            predictions[idx]['scores'] = scores
-        metric.update(predictions,targets)
-        '''
-        predictions.extend(model(image))
-        targets.extend(target)
-        '''
-
-    print(metric.compute())
-
-    '''
-    # Compute IOU
-    metric = IntersectionOverUnion()
-    iou = metric(predictions, targets)
-    print(iou)
-    iou = metric([predictions[0]], [targets[0]])
-    print(iou)
-    iou = metric([predictions[1]], [targets[1]])
-    print(iou)
-    fig_, ax_ = metric.plot(iou)
-    # iou = intersection_over_union(predictions[0], targets[0])
-    # print(iou)
-    '''
+    met = metric(updated_predictions, targets)
+    
+    return met['iou']
 
 if __name__ == "__main__":
     import torch
@@ -98,4 +90,8 @@ if __name__ == "__main__":
     # Create dataset object
     train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=10, device=device)
 
-    get_detection_metrics(model, train_data, min_score=, collate_fn=collate_fn)
+    # Get model outputs
+    predictions = get_model_outputs(model, train_data, collate_fn=collate_fn)
+    targets = get_targets(train_data)
+    iou = get_iou(predictions, targets, min_score=0.3)
+    print(iou)

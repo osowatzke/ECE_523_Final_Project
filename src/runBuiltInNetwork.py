@@ -2,6 +2,7 @@ import torch
 from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from ClassConstants import ClassConstants
+from DataManager import DataManager
 from PathConstants import PathConstants
 from FlirDataset import FlirDataset
 import matplotlib.pyplot as plt
@@ -19,13 +20,18 @@ in_features = model.roi_heads.box_predictor.cls_score.in_features
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(ClassConstants.LABELS.keys()))
 model.to(device)
 
+# Create path constants singleton
+data_manager = DataManager()
+data_manager.download_datasets()
+data_dir = data_manager.get_download_dir()
+PathConstants(data_dir)
+
 # Create dataset object
-PathConstants()
 train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=100, device=device)
 
 # Load pretrained weights
 file_path = os.path.dirname(__file__)
-weights_path = os.path.join(file_path,'weights','cp__epoch_5_batch_0.pth')
+weights_path = os.path.join(file_path,'weights','built_in','cp__epoch_20_batch_0.pth')
 state_dict = torch.load(weights_path,map_location=device)
 model.load_state_dict(state_dict['model_state'])
 
@@ -42,8 +48,8 @@ img = img[0,:,:].detach().numpy()
 boxes = pred[0]['boxes'].detach().numpy()
 labels = pred[0]['labels'].detach().numpy()
 scores = pred[0]['scores'].detach().numpy()
-boxes = boxes[scores > 0.5]
-labels = labels[scores > 0.5]
+boxes = boxes[scores > 0.25]
+labels = labels[scores > 0.25]
 boxes = boxes[labels != 0]
 labels = labels[labels != 0]
 #print(boxes)

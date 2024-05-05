@@ -30,12 +30,12 @@ class RegionProposalDataset(Dataset):
 
     def append(self,data_sample):
         if self.use_built_in_rpn:
-            image = data_sample[0].detach().cpu() #.detach().numpy()
-            feature_map = data_sample[1].detach().cpu() #detach().numpy()
+            image = data_sample[0].detach().cpu()
+            feature_map = data_sample[1].detach().cpu()
             targets = data_sample[2]
             data_sample = (image, feature_map, targets)
         else:
-            feature_map = data_sample[0].detach().cpu() #detach().numpy()
+            feature_map = data_sample[0].detach().cpu()
             targets = data_sample[1]
             data_sample = (feature_map, targets)
         self.data.append(data_sample)
