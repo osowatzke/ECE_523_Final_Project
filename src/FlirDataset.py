@@ -48,7 +48,7 @@ class FlirDataset(Dataset):
         num_images = len(self.images)
         image_shape = self.images[0].shape
         num_cells = np.prod(np.array(image_shape[:2]))
-        num_cells = num_images * num_cells
+        num_cells = num_images * np.double(num_cells)
         img_sum = np.zeros(self.images[0].shape[2])
         for img in self.images:
             img = np.float64(img)
