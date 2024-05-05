@@ -373,6 +373,13 @@ class rpn_loss_fn:
         return losses
 
 
+def rpn_log_fn(loss, model_outputs):
+    loss_dict = model_outputs[1]
+    return {'Loss/train'            : loss,
+            'Objectness_Loss/train' : loss_dict['loss_objectness'],
+            'RPN_Box_Loss/train'    : loss_dict['loss_rpn_box_reg']}
+
+
 if __name__ == "__main__":
 
     import math
