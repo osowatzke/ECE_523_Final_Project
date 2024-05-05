@@ -361,10 +361,16 @@ class rpn_collate_fn:
         return images, features, targets
 
 
-def rpn_loss_fn(model_output):
-    loss_dict = model_output[1]
-    losses = sum(loss for loss in loss_dict.values())
-    return losses
+class rpn_loss_fn:
+    def __init__(self, weights):
+        self.weights = weights
+
+    def __call__(self, model_output):
+        loss_dict = model_output[1]
+        losses = 0
+        for key, loss in loss_dict.items():
+            losses = losses + loss * self.weights[key]
+        return losses
 
 
 if __name__ == "__main__":
@@ -415,6 +421,10 @@ if __name__ == "__main__":
     # Create optimizer    
     optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-3)
 
+    # Create loss function with user weights
+    weights = {"loss_objectness" : 1, "loss_rpn_box_reg" : 1}
+    loss_fn = rpn_loss_fn(weights)
+
     # Loop for each epoch
     for epoch in range(num_epochs):
 
@@ -424,7 +434,7 @@ if __name__ == "__main__":
             # Run user-defined model
             optimizer.zero_grad()
             model_output = rpn(*args)
-            losses = rpn_loss_fn(model_output)
+            losses = loss_fn(model_output)
             losses.backward()
             optimizer.step()
     
@@ -459,7 +469,7 @@ if __name__ == "__main__":
             # Train built in network
             optimizer.zero_grad()
             model_output = rpn(*args)
-            losses = rpn_loss_fn(model_output)
+            losses = loss_fn(model_output)
             losses.backward()
             optimizer.step()
 
