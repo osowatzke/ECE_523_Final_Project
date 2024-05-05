@@ -136,3 +136,12 @@ model_20240503_210041_12
 model_20240503_210041_11
 model_20240503_210041_10
 .vscode/launch.json
+src/weights/built_in/cp__epoch_5_batch_0.pth
+src/weights/custom/cp__epoch_50_batch_0.pth
+valid_results.pth
+valid_results_custom.pth
+*.pth
+valid_results_custom.pth
+valid_results.pth
+src/weights/custom/cp__epoch_50_batch_0.pth
+src/weights/built_in/cp__epoch_5_batch_0.pth

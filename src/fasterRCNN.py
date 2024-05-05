@@ -97,15 +97,24 @@ class FasterRCNN(nn.Module):
             feature_maps = {'0': feature_maps}
             proposals, rpn_loss = self.rpn(image_list, feature_maps, targets)
         else:
-            target_boxes = [target['boxes'] for target in targets]
-            proposals, rpn_loss = self.rpn(feature_maps, target_boxes)
+            if self.training:
+                target_boxes = [target['boxes'] for target in targets]
+            else:
+                target_boxes = None
+        proposals, rpn_loss = self.rpn(feature_maps, target_boxes)
         if not isinstance(feature_maps,dict):
             feature_maps = {'0': feature_maps}
-        detections, detection_loss = self.roi_heads(feature_maps, proposals, image_sizes, targets)
-        losses = {}
-        losses.update(rpn_loss)
-        losses.update(detection_loss)
-        return detections, losses
+
+        if self.training:
+            detections, detection_loss = self.roi_heads(feature_maps, proposals, image_sizes, targets)
+            losses = {}
+            losses.update(rpn_loss)
+            losses.update(detection_loss)
+            return detections, losses
+        else:
+            detections, detection_loss = self.roi_heads(feature_maps, proposals, image_sizes, targets=None)
+            return detections
+
 
 if __name__ == "__main__":
     
