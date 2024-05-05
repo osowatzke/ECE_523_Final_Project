@@ -41,17 +41,21 @@ class FasterRCNN(nn.Module):
     def __init__(
         self,
         image_size,
-        normalize_images       = False,
-        image_mean             = None,
-        image_std              = None,
-        use_built_in_rpn       = False,
-        use_built_in_roi_heads = True):
+        normalize_images        = False,
+        image_mean              = None,
+        image_std               = None,
+        region_proposal_network = None,
+        roi_heads_network       = None,
+        use_built_in_rpn        = False,
+        use_built_in_roi_heads  = True):
 
         super().__init__()
         self.image_size = image_size
         self.normalize_images = normalize_images
         self.image_mean = image_mean
         self.image_std = image_std
+        self.rpn = region_proposal_network
+        self.roi_heads = roi_heads_network
         self.use_built_in_rpn = use_built_in_rpn
         self.use_built_in_roi_heads = use_built_in_roi_heads
         self.backbone = BackboneNetwork()
@@ -65,15 +69,17 @@ class FasterRCNN(nn.Module):
         self.feature_map_size = output.shape
 
     def __create_rpn(self):
-        self.rpn = create_region_proposal_network(
-            image_size       = self.image_size,
-            feature_map_size = self.feature_map_size,
-            use_built_in_rpn = self.use_built_in_rpn)
+        if self.rpn is None:
+            self.rpn = create_region_proposal_network(
+                image_size       = self.image_size,
+                feature_map_size = self.feature_map_size,
+                use_built_in_rpn = self.use_built_in_rpn)
 
     def __create_roi_heads(self):
-        self.roi_heads = create_roi_heads_network(
-            feature_map_size       = self.feature_map_size,
-            use_built_in_roi_heads = self.use_built_in_roi_heads)
+        if self.roi_heads is None:
+            self.roi_heads = create_roi_heads_network(
+                feature_map_size       = self.feature_map_size,
+                use_built_in_roi_heads = self.use_built_in_roi_heads)
         
     def to(self,device):
         super().to(device)

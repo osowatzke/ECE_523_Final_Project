@@ -24,6 +24,10 @@ import torchvision.models.detection.rpn as torch_rpn
 from torchvision.models.detection.anchor_utils import AnchorGenerator
 from torchvision.models.detection.image_list import ImageList
 
+# Flags which specify which network to train
+train_rpn = True
+train_roi_heads = True
+
 # Flags to switch between built-in and custom implementations
 use_built_in_rpn = False
 use_built_in_roi_heads = True
@@ -38,7 +42,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create input dataset
-dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images = 10)
+dataset = FlirDataset(PathConstants.TRAIN_DIR)
 
 # Create backbone network
 backbone = BackboneNetwork()
@@ -70,7 +74,7 @@ network_trainer = NetworkTrainer(
     model      = rpn,
     optimizer  = optimizer,
     run_folder = run_folder,
-    num_epochs = 10,
+    num_epochs = 50,
     batch_size = 128,
     loss_fn    = rpn_loss_fn,
     collate_fn = collate_fn)
@@ -99,7 +103,7 @@ network_trainer = NetworkTrainer(
     model      = roi_heads,
     optimizer  = optimizer,
     run_folder = run_folder,
-    num_epochs = 10,
+    num_epochs = 50,
     batch_size = 128,
     loss_fn    = loss_fn,
     collate_fn = collate_fn)
