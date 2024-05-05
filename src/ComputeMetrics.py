@@ -1,5 +1,6 @@
 from torchmetrics.functional.detection.iou import intersection_over_union
 from torchmetrics.detection import IntersectionOverUnion
+from torchmetrics.detection import MeanAveragePrecision
 from torch.utils.data import DataLoader
 
 def collate_fn(data):
@@ -33,8 +34,8 @@ def get_targets(dataset):
         targets.append(dataset[idx][1])
     return targets
 
-def get_iou(predictions, targets, min_score=0):
-    
+def filter_predictions(predictions, min_score=0):
+
     # Filter model predictions
     updated_predictions = []
     for idx in range(len(predictions)):
@@ -48,12 +49,23 @@ def get_iou(predictions, targets, min_score=0):
             'boxes'  : boxes,
             'labels' : labels,
             'scores' : scores})
+    return updated_predictions
+        
+def get_iou(predictions, targets):
 
     metric = IntersectionOverUnion()
 
-    met = metric(updated_predictions, targets)
+    met = metric(predictions, targets)
     
     return met['iou']
+
+def get_map(predictions, targets, iou_thresholds):
+
+    metric = MeanAveragePrecision(iou_thresholds=iou_thresholds)
+
+    met = metric(predictions, targets)
+
+    print(met)
 
 if __name__ == "__main__":
     import torch
@@ -76,7 +88,7 @@ if __name__ == "__main__":
     model.to(device)
 
     file_path = os.path.dirname(__file__)
-    weights_path = os.path.join(file_path,'weights','built_in','cp__epoch_5_batch_0.pth')
+    weights_path = os.path.join(file_path,'weights','built_in','cp__epoch_20_batch_0.pth')
     state_dict = torch.load(weights_path,map_location=device)
     model.load_state_dict(state_dict['model_state'])
     model.eval()
@@ -87,11 +99,31 @@ if __name__ == "__main__":
     data_dir = data_manager.get_download_dir()
     PathConstants(data_dir)
 
-    # Create dataset object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=10, device=device)
+    if False:
 
-    # Get model outputs
-    predictions = get_model_outputs(model, train_data, collate_fn=collate_fn)
-    targets = get_targets(train_data)
-    iou = get_iou(predictions, targets, min_score=0.3)
+        # Create dataset object
+        train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=-1, device=device)
+
+        # Get reference bounding boxes
+        targets = get_targets(train_data)
+
+        # Get model outputs
+        predictions = get_model_outputs(model, train_data, collate_fn=collate_fn)
+
+        # Save predictions and training targets
+        torch.save({'predictions': predictions, 'targets': targets}, 'default_network.pth')
+
+    else:
+        # Load model data
+        model_dict = torch.load('default_network.pth')
+
+        predictions = model_dict['predictions']
+        targets = model_dict['targets']
+
+    filter_predictions(predictions, min_score=0.25)
+
+    iou = get_iou(predictions, targets)
+
+    map = get_map(predictions, targets, [0.5, 0.75])
+
     print(iou)
