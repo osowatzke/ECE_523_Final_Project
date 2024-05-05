@@ -15,6 +15,8 @@ class RoiHeadsDataset(Dataset):
         proposals = data_sample[1]
         image_sizes = data_sample[2]
         targets = data_sample[3]
+        if self.device is not None:
+            feature_map.to(self.device)
         data_sample = (feature_map, proposals, image_sizes, targets)
         return data_sample
 
