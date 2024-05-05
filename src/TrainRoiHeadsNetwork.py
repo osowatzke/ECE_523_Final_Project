@@ -37,7 +37,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create input dataset
-dataset = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=192, device=device)
 
 # Create backbone network
 backbone = BackboneNetwork()
@@ -110,7 +110,7 @@ network_trainer = NetworkTrainer(
     optimizer  = optimizer,
     run_folder = run_folder,
     num_epochs = 50,
-    batch_size = 128,
+    batch_size = 96,
     log_fn     = roi_log_fn,
     loss_fn    = loss_fn,
     collate_fn = collate_fn)
