@@ -1,5 +1,6 @@
 from BackboneNetwork        import BackboneNetwork
 from DataManager            import DataManager
+from FlirDataset            import FlirDataset
 from NetworkTrainer         import NetworkTrainer
 from PathConstants          import PathConstants
 from RegionProposalNetwork  import *
@@ -10,6 +11,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-w', '--loss_weights', nargs=2, default=[1,1], type=float)
 parser.add_argument('-l', '--learning_rate', default=0.01, type=float)
+args = parser.parse_args()
 
 # Determine the device
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -28,7 +30,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create input dataset
-dataset = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+dataset = FlirDataset(PathConstants.TRAIN_DIR, num_images=10, device=device)
 
 # Create backbone network
 backbone = BackboneNetwork()
@@ -52,14 +54,14 @@ rpn.train()
 # Train the RPN network
 optimizer = torch.optim.SGD(
     rpn.parameters(),
-    lr = parser.learning_rate,
+    lr = args.learning_rate,
     momentum = 0.9,
     weight_decay = 5e-3)
 
 # Create loss function with user weights
 weights = {
-    "loss_objectness"  : parser.loss_weights[0], 
-    "loss_rpn_box_reg" : parser.loss_weights[1]}
+    "loss_objectness"  : args.loss_weights[0], 
+    "loss_rpn_box_reg" : args.loss_weights[1]}
 loss_fn = rpn_loss_fn(weights)
 
 collate_fn = rpn_collate_fn(use_built_in_rpn)
@@ -76,4 +78,4 @@ network_trainer = NetworkTrainer(
     loss_fn    = loss_fn,
     collate_fn = collate_fn)
 
-network_trainer.train() 
+network_trainer.train()

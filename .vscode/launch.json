@@ -12,8 +12,7 @@
             "purpose": ["debug-in-terminal"],
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true,
-            "args": ["--loss_weights", "4", "30", "1", "200", "-b", "4"]
+            "justMyCode": true
         }
     ]
 }
