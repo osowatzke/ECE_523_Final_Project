@@ -420,18 +420,28 @@ class roi_collate_fn:
 
 
 class roi_loss_fn:
-    def __init__(self, use_built_in_roi_heads=False):
+    def __init__(self, weights, use_built_in_roi_heads=False):
         if not use_built_in_roi_heads:
             print("WARNING: Custom ROI Heads Network has not been fully integrated")
         self._loss_fn = self._builtin_fn
+        self._weights = weights
 
     def __call__(self, model_output):
         return self._loss_fn(model_output)
     
     def _builtin_fn(self, model_output):
         loss_dict = model_output[1]
-        losses = sum(loss for loss in loss_dict.values())
+        losses = 0
+        for key, loss in loss_dict.items():
+            losses = losses + loss * self._weights[key]
         return losses
+
+
+def roi_log_fn(loss, model_outputs):
+    loss_dict = model_outputs[1]
+    return {'Loss/train'            : loss,
+            'Classifier_Loss/train' : loss_dict['loss_classifier'],
+            'Box_Loss/train'        : loss_dict['loss_box_reg']}
 
 
 if __name__ == "__main__":
