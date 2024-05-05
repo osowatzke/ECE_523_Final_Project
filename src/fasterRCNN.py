@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
     # Loss function
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--scale_class_loss', action='store_true')
+    parser.add_argument('-s', '--scale_class_loss')
     args = parser.parse_args()
     if args.scale_class_loss:
         rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
