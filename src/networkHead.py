@@ -372,6 +372,7 @@ def create_roi_heads_network(feature_map_size, use_built_in_roi_heads=False):
 
 
 def create_roi_dataset(rpn, dataset, rpn_dataset, use_built_in_roi_heads=False, device=None):
+    print(device)
     
     if not use_built_in_roi_heads:                 
         print("WARNING: Custom ROI Heads Network has not been fully integrated")
