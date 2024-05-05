@@ -13,15 +13,15 @@ class RegionProposalDataset(Dataset):
     def __getitem__(self, idx):
         data_sample = self.data[idx]
         if self.use_built_in_rpn:
-            image = torch.tensor(data_sample[0], dtype=torch.float32)
-            feature_map = torch.tensor(data_sample[1], dtype=torch.float32)
+            image = data_sample[0]
+            feature_map = data_sample[1]
             targets = data_sample[2]
             if self.device is not None:
                 image = image.to(self.device)
                 feature_map = feature_map.to(self.device)
             data_sample = (image, feature_map, targets)
         else:
-            feature_map = torch.tensor(data_sample[0], dtype=torch.float32)
+            feature_map = data_sample[0]
             targets = data_sample[1]
             if self.device is not None:
                 feature_map = feature_map.to(self.device)
@@ -30,12 +30,12 @@ class RegionProposalDataset(Dataset):
 
     def append(self,data_sample):
         if self.use_built_in_rpn:
-            image = data_sample[0].detach().numpy()
-            feature_map = data_sample[1].detach().numpy()
+            image = data_sample[0].detach().cpu() #.detach().numpy()
+            feature_map = data_sample[1].detach().cpu() #detach().numpy()
             targets = data_sample[2]
             data_sample = (image, feature_map, targets)
         else:
-            feature_map = data_sample[0].detach().numpy()
+            feature_map = data_sample[0].detach().cpu() #detach().numpy()
             targets = data_sample[1]
             data_sample = (feature_map, targets)
         self.data.append(data_sample)

@@ -11,7 +11,7 @@ class RoiHeadsDataset(Dataset):
     
     def __getitem__(self, idx):
         data_sample = self.data[idx]
-        feature_map = torch.tensor(data_sample[0], dtype=torch.float32)
+        feature_map = data_sample[0]
         proposals = data_sample[1]
         image_sizes = data_sample[2]
         targets = data_sample[3]
@@ -19,7 +19,7 @@ class RoiHeadsDataset(Dataset):
         return data_sample
 
     def append(self,data_sample):
-        feature_map = data_sample[0].detach().numpy()
+        feature_map = data_sample[0].detach().cpu()
         proposals = data_sample[1]
         image_sizes = data_sample[2]
         targets = data_sample[3]
