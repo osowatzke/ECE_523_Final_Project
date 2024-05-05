@@ -107,6 +107,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--scale_class_loss', default=1)
     parser.add_argument('-n', '--normalize_images', action='store_true')
+    parser.add_argument('-b', '--batch_size', default=96)
     args = parser.parse_args()
 
     # Create path constants singleton
@@ -161,7 +162,7 @@ if __name__ == "__main__":
         optimizer   = optimizer,
         run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 96,
+        batch_size  = args.batch_size,
         loss_fn     = rcnn_loss_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
