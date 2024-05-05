@@ -8,5 +8,5 @@ class fasterRCNNloss():
         loss_dict = model_output[1]
         losses = 0
         for key, loss in loss_dict.items():
-            losses = losses + loss * self.scaling[key]
+            losses = losses + loss * int(self.scaling[str(key)])
         return losses
