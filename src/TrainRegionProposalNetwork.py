@@ -11,6 +11,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-w', '--loss_weights', nargs=2, default=[1,1], type=float)
 parser.add_argument('-l', '--learning_rate', default=0.01, type=float)
 
+# Determine the device
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = torch.device(device)
+
 # Flags to switch between built-in and custom implementations
 use_built_in_rpn = False
 
@@ -24,7 +28,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create input dataset
-dataset = FlirDataset(PathConstants.TRAIN_DIR)
+dataset = FlirDataset(PathConstants.TRAIN_DIR, device=device)
 
 # Create backbone network
 backbone = BackboneNetwork()
@@ -42,6 +46,7 @@ else:
 # Create RPN
 torch.manual_seed(0)
 rpn = create_region_proposal_network(image_size, feature_map_size, use_built_in_rpn)
+rpn.to(device)
 rpn.train()
 
 # Train the RPN network
