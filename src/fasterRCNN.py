@@ -28,6 +28,14 @@ def rcnn_collate_fn(data):
     images = images.reshape((len(data),) + data[0][0].shape)
     return images, targets
 
+def rcnn_log_fn(loss, model_outputs):
+    loss_dict = model_outputs[1]
+    return {'Loss/train'            : loss,
+            'Objectness_Loss/train' : loss_dict['loss_objectness'],
+            'RPN_Box_Loss/train'    : loss_dict['loss_rpn_box_reg'],
+            'Classifier_Loss/train' : loss_dict['loss_classifier'],
+            'Box_Loss/train'        : loss_dict['loss_box_reg']}
+
 class FasterRCNN(nn.Module):
 
     def __init__(
@@ -105,9 +113,9 @@ if __name__ == "__main__":
 
     # Parse optional input arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--scale_class_loss', default=1)
+    parser.add_argument('-s', '--scale_class_loss', default=1, type=int)
     parser.add_argument('-n', '--normalize_images', action='store_true')
-    parser.add_argument('-b', '--batch_size', default=96)
+    parser.add_argument('-b', '--batch_size', default=96, type=int)
     args = parser.parse_args()
 
     # Create path constants singleton
@@ -147,7 +155,7 @@ if __name__ == "__main__":
     
     # Set the period for saving data
     # -1 will cause data not to be saved
-    save_period = {'epoch' : 1, 'batch' : -1}
+    save_period = {'epoch' : 1, 'batch' : 1}
 
     # Loss function
     rcnn_loss_fn = fasterRCNNloss({"loss_objectness": args.scale_class_loss, "loss_rpn_box_reg": 1, "loss_classifier": args.scale_class_loss, "loss_box_reg": 1})
@@ -162,8 +170,9 @@ if __name__ == "__main__":
         optimizer   = optimizer,
         run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = int(args.batch_size),
+        batch_size  = args.batch_size,
         loss_fn     = rcnn_loss_fn,
+        log_fn      = rcnn_log_fn,
         collate_fn  = rcnn_collate_fn,
         save_period = save_period,
         device      = device

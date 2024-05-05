@@ -38,6 +38,9 @@ def loss_fn(loss_dict):
 def default_loss_fn(model_output):
     return model_output
 
+def default_log_fn(loss, _):
+    return {'Loss/train' : loss}
+
 class CustomSampler(Sampler):
     def __init__(self, indices=None):
         self.indices = indices
@@ -55,8 +58,9 @@ class NetworkTrainer:
                  run_folder,
                  num_epochs=1,
                  batch_size=1,
-                 loss_fn=None,
                  collate_fn=None,
+                 loss_fn=None,
+                 log_fn=None,
                  save_period={'epoch': 1, 'batch':-1},
                  device=torch.device('cpu')):
         
@@ -66,8 +70,9 @@ class NetworkTrainer:
         self.optimizer = optimizer
         self.num_epochs = num_epochs
         self.batch_size = batch_size
-        self.loss_fn = loss_fn
         self.collate_fn = collate_fn
+        self.loss_fn = loss_fn
+        self.log_fn = log_fn
         self.device = device
         self.save_period = save_period
 
@@ -77,6 +82,10 @@ class NetworkTrainer:
         # Determine loss function
         if self.loss_fn is None:
             self.loss_fn = default_loss_fn
+
+        # Determnine log funciton
+        if self.log_fn is None:
+            self.log_fn = default_log_fn
 
         # Initial epoch and batch number
         self.epoch = 0
@@ -355,7 +364,10 @@ class NetworkTrainer:
                 self.optimizer.step()
 
                 # Log the loss to TensorBoard
-                self.summary_writer.add_scalar('Loss/train', loss.item(), self.batch + self.epoch*self.num_batches)
+                log_dict = self.log_fn(loss, model_output)
+                idx = self.batch + self.epoch*self.num_batches
+                for key, value in log_dict.items():
+                    self.summary_writer.add_scalar(key, value.item(), idx)
                 self.summary_writer.flush()
 
                 # Print the batch loss

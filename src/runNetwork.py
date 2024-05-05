@@ -33,7 +33,7 @@ model.to(device)
 
 # Load pretrained weights
 file_path = os.path.dirname(__file__)
-weights_path = os.path.join(file_path,'weights','cp__epoch_25_batch_0.pth')
+weights_path = os.path.join(file_path,'weights','cp__epoch_50_batch_0.pth')
 state_dict = torch.load(weights_path,map_location=device)
 model.load_state_dict(state_dict['model_state'])
 
@@ -42,16 +42,16 @@ model.eval()
 #print(type(train_data[0][0]))
 #test_data = train_data[0][0].reshape((1,) + train_data[0][0].shape)
 #print(test_data.shape)
-img = train_data[0][0]
-pred = model(img.reshape((1,) + img.shape),[train_data[0][1]])[0]
+img = train_data[49][0]
+pred = model(img.reshape((1,) + img.shape),[train_data[49][1]])[0]
 img = img[0,:,:].detach().numpy()
 #print(test_data[0,:,:].shape)
 #print(pred)
 boxes = pred[0]['boxes'].detach().numpy()
 labels = pred[0]['labels'].detach().numpy()
 scores = pred[0]['scores'].detach().numpy()
-boxes = boxes[scores > 0.15]
-labels = labels[scores > 0.15]
+boxes = boxes[scores > 0.1]
+labels = labels[scores > 0.1]
 boxes = boxes[labels != 0]
 labels = labels[labels != 0]
 #print(boxes)

@@ -70,8 +70,8 @@ network_trainer = NetworkTrainer(
     model      = rpn,
     optimizer  = optimizer,
     run_folder = run_folder,
-    num_epochs = 1,
-    batch_size = 1,
+    num_epochs = 10,
+    batch_size = 128,
     loss_fn    = rpn_loss_fn,
     collate_fn = collate_fn)
 
@@ -87,7 +87,7 @@ roi_heads = create_roi_heads_network(feature_map_size, use_built_in_roi_heads)
 roi_heads.train()
 
 # Train ROI Heads Network
-optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-3)
+optimizer = torch.optim.SGD(rpn.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-3)
 
 loss_fn = roi_loss_fn(use_built_in_roi_heads)
 collate_fn = roi_collate_fn(use_built_in_roi_heads)
@@ -99,8 +99,8 @@ network_trainer = NetworkTrainer(
     model      = roi_heads,
     optimizer  = optimizer,
     run_folder = run_folder,
-    num_epochs = 1,
-    batch_size = 1,
+    num_epochs = 10,
+    batch_size = 128,
     loss_fn    = loss_fn,
     collate_fn = collate_fn)
 
