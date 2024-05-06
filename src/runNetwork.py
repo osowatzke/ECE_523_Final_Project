@@ -26,7 +26,7 @@ data_dir = data_manager.get_download_dir()
 PathConstants(data_dir)
 
 # Create dataset object
-train_data = FlirDataset(PathConstants.TRAIN_DIR, compute_mean_std=False, num_images=100, downsample=1, device=device) # num_images=100, 
+train_data = FlirDataset(PathConstants.TRAIN_DIR, compute_mean_std=False, num_images=200, downsample=1, device=device) # num_images=100, 
 # savemat('train_data_statistics.mat',{'image_std' : train_data.std, 'image_mean' : train_data.mean})
 
 mat_dict = loadmat('train_data_statistics.mat')
@@ -43,14 +43,14 @@ image_std = image_std.ravel()
 image_size = train_data[0][0].shape
 model = FasterRCNN(
     image_size       = image_size,
-    normalize_images = True,
+    normalize_images = False,
     image_mean       = image_mean,
     image_std        = image_std)
 model.to(device)
 
 # Load pretrained weights
 file_path = os.path.dirname(__file__)
-weights_path = os.path.join(file_path,'weights','normalized','cp__epoch_25_batch_0.pth')
+weights_path = os.path.join(file_path,'weights','baseline','cp__epoch_50_batch_0.pth')
 state_dict = torch.load(weights_path,map_location=device)
 model.load_state_dict(state_dict['model_state'])
 

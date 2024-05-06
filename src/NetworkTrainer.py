@@ -438,7 +438,7 @@ class NetworkTrainer:
 if __name__ == "__main__":
 
     # Download data and create path constants singleton
-    data_manager = DataManager('train')
+    data_manager = DataManager()
     data_manager.download_datasets()
     data_dir = data_manager.get_download_dir()
     PathConstants(data_dir)
@@ -466,8 +466,8 @@ if __name__ == "__main__":
     save_period = {'epoch' : 1, 'batch' : -1}
 
     # Create datasets object
-    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device, num_images=2)
-    valid_data = FlirDataset(PathConstants.VAL_DIR, device=device, num_images=2)
+    train_data = FlirDataset(PathConstants.TRAIN_DIR, device=device)
+    valid_data = FlirDataset(PathConstants.VAL_DIR, device=device)
 
     # Run subfolder
     run_folder = 'built_in_faster_rcnn'
@@ -480,7 +480,7 @@ if __name__ == "__main__":
         optimizer   = optimizer,
         run_folder  = run_folder,
         num_epochs  = 50,
-        batch_size  = 1,
+        batch_size  = 16,
         log_fn      = custom_log_fn,
         loss_fn     = loss_fn,
         collate_fn  = collate_fn,

@@ -18,6 +18,7 @@ from ClassConstants import ClassConstants
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.ops import MultiScaleRoIAlign
+from torcheval.metrics.functional import multiclass_confusion_matrix
 
 from torch.utils.data      import DataLoader
 from RoiHeadsDataset       import RoiHeadsDataset
@@ -321,7 +322,7 @@ class headNet(nn.Module):
                 backbone = BackboneNetwork()
 
             # For each batch
-            for i, tdata in enumerate(self.training_loader):
+            for i, tdata in enumerate(self.validation_loader):
 
                 toutputs, tclasses_, tboxes_ = self.runNetwork(tdata, backbone)
 
@@ -334,8 +335,8 @@ class headNet(nn.Module):
                     # print("Pred: {}, Act: {}".format(int(predOutputs[r]), tclasses_[r]))
                 print("Total accuracy is: {}%".format(totalAcc * 100 / toutputs[0].size(dim=0)))
 
-                conf = ignite.metrics.confusion_matrix.ConfusionMatrix(num_classes=17)
-                print(conf(predOutputs_, tclasses_))
+                conf = multiclass_confusion_matrix(predOutputs.to(torch.int64), tclasses_.to(torch.int64), 17)
+                print(conf)
 
 
 def create_roi_heads_network(feature_map_size, use_built_in_roi_heads=False):
@@ -463,7 +464,7 @@ if __name__ == "__main__":
     # obj.load_state_dict(torch.load("model_20240502_134909_1", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_180252_0", map_location=torch.device('cpu')))
     # obj.load_state_dict(torch.load("model_20240502_194941_3", map_location=torch.device('cpu')))
-    # obj.load_state_dict(torch.load("model_20240503_152227_4", map_location=torch.device('cpu')))
+    obj.load_state_dict(torch.load("model_20240503_210041_7", map_location=torch.device('cpu')))
     # Best so far: model_20240503_014417_17 (old network) model_20240503_141302_0 (new network)
 
     # Run training
