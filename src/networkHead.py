@@ -334,6 +334,9 @@ class headNet(nn.Module):
                     # print("Pred: {}, Act: {}".format(int(predOutputs[r]), tclasses_[r]))
                 print("Total accuracy is: {}%".format(totalAcc * 100 / toutputs[0].size(dim=0)))
 
+                conf = ignite.metrics.confusion_matrix.ConfusionMatrix(num_classes=17)
+                print(conf(predOutputs_, tclasses_))
+
 
 def create_roi_heads_network(feature_map_size, use_built_in_roi_heads=False):
     
@@ -453,7 +456,7 @@ if __name__ == "__main__":
     # Object
     # obj = classifierNet(10700).cuda()
     # obj = classifierNet(48).cuda()
-    obj = headNet(10700)
+    obj = headNet(32)
     obj.initDataLoader()
 
 
@@ -464,7 +467,7 @@ if __name__ == "__main__":
     # Best so far: model_20240503_014417_17 (old network) model_20240503_141302_0 (new network)
 
     # Run training
-    obj.runTraining(num_epochs=1000)
+    # obj.runTraining(num_epochs=1000)
 
     # Test results
     obj.testClassifier()
