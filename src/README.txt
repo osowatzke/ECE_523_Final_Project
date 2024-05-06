@@ -19,3 +19,6 @@ Name                            | Direct Call
 TrainDefaultFasterRCNN.ipynb    | Train Default Faster RCNN
 TrainFasterRCNN.ipynb           | Train Custom Faster RCNN
 Test_Network_Metrics.ipynb      | Generate Metrics
+
+NOTE:   Run data will be created in ../runs
+        FLIR_ADAS_v2 dataset will be copied to ~/FLIR_ADAS_v2
