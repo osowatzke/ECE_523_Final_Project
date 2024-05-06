@@ -9,6 +9,11 @@ from fasterRCNN import FasterRCNN
 from fasterRCNN import rcnn_collate_fn
 import time
 import argparse
+import torch
+
+# Determine the device
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = torch.device(device)
 
 def collate_fn(data):
     """
@@ -58,9 +63,9 @@ def filter_predictions(predictions, min_score=0, classes=(0,1,2,3,4,5,6,7,8,9,10
         labels = labels[scores > min_score]
         scores = scores[scores > min_score]
     
-        indices = torch.zeros(labels.size())
+        indices = torch.zeros(labels.size()).to(device)
         for i in range(len(classes)):
-            indices = torch.logical_or(indices, labels == classes[i])
+            indices = torch.logical_or(indices, labels == classes[i]).to(device)
         boxes  = boxes[indices]
         labels = labels[indices]
         scores = scores[indices]
@@ -82,7 +87,7 @@ def filter_targets(targets, classes=(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)):
         boxes = targets[idx]['boxes']
         labels = targets[idx]['labels']
     
-        indices = torch.zeros(labels.size())
+        indices = torch.zeros(labels.size()).to(device)
         for i in range(len(classes)):
             indices = torch.logical_or(indices, labels == classes[i])
         boxes  = boxes[indices]
@@ -111,7 +116,6 @@ def get_map(predictions, targets, iou_thresholds):
     print(met)
 
 if __name__ == "__main__":
-    import torch
     from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
     from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
     from ClassConstants import ClassConstants
@@ -127,20 +131,16 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--map_vals', nargs=3, default=[0.25,0.25,0.25], type=float)
     args = parser.parse_args()
 
-    # Determine the device
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    device = torch.device(device)
-
     # Create a Pytorch faster RCNN model
-    model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(ClassConstants.LABELS.keys()))
-    model.to(device)
+    # model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
+    # in_features = model.roi_heads.box_predictor.cls_score.in_features
+    # model.roi_heads.box_predictor = FastRCNNPredictor(in_features, len(ClassConstants.LABELS.keys()))
+    # model.to(device)
     file_path = os.path.dirname(__file__)
-    weights_path = os.path.join(file_path,'weights','built_in','cp__epoch_5_batch_0.pth')
-    state_dict = torch.load(weights_path,map_location=device)
-    model.load_state_dict(state_dict['model_state'])
-    model.eval()
+    # weights_path = os.path.join(file_path,'weights','built_in','cp__epoch_5_batch_0.pth')
+    # state_dict = torch.load(weights_path,map_location=device)
+    # model.load_state_dict(state_dict['model_state'])
+    # model.eval()
 
     # Create a custom faster RCNN model
     model_ = FasterRCNN(
@@ -201,6 +201,7 @@ if __name__ == "__main__":
         iou = get_iou(filtered_predictions, filtered_targets)
 
         map = get_map(filtered_predictions, filtered_targets, args.map_vals)
+        # map_results.append(map)
         # map = get_map(filtered_predictions, filtered_targets, [0.25, .25, .25])
 
         # img = model_dict['imgs'][plotted_image_index][0]
