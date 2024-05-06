@@ -43,10 +43,12 @@ def get_targets(dataset):
         targets.append(dataset[idx][1])
     return targets
 
-def filter_predictions(predictions, min_score=0):
+def filter_predictions(predictions, min_score=0, classes=(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)):
 
     # Filter model predictions
     updated_predictions = []
+
+    # Filter out low scores and wrong classes
     for idx in range(len(predictions)):
         boxes = predictions[idx]['boxes']
         labels = predictions[idx]['labels']
@@ -54,10 +56,41 @@ def filter_predictions(predictions, min_score=0):
         boxes  = boxes[scores > min_score]
         labels = labels[scores > min_score]
         scores = scores[scores > min_score]
+    
+        indices = torch.zeros(labels.size())
+        for i in range(len(classes)):
+            indices = torch.logical_or(indices, labels == classes[i])
+        boxes  = boxes[indices]
+        labels = labels[indices]
+        scores = scores[indices]
+
         updated_predictions.append({
             'boxes'  : boxes,
             'labels' : labels,
             'scores' : scores})
+
+    return updated_predictions
+
+def filter_targets(targets, classes=(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)):
+
+    # Filter model predictions
+    updated_predictions = []
+
+    # Filter out low scores and wrong classes
+    for idx in range(len(predictions)):
+        boxes = targets[idx]['boxes']
+        labels = targets[idx]['labels']
+    
+        indices = torch.zeros(labels.size())
+        for i in range(len(classes)):
+            indices = torch.logical_or(indices, labels == classes[i])
+        boxes  = boxes[indices]
+        labels = labels[indices]
+
+        updated_predictions.append({
+            'boxes'  : boxes,
+            'labels' : labels})
+
     return updated_predictions
         
 def get_iou(predictions, targets):
@@ -107,7 +140,7 @@ if __name__ == "__main__":
         normalize_images = False)
     
     model_.to(device)
-    model_.load_state_dict(torch.load(r"C:\Users\nicky\OneDrive\Documents\GitHub\ECE_523_Final_Project\src\weights\custom\cp__epoch_50_batch_0.pth", map_location=device)['model_state'])
+    model_.load_state_dict(torch.load(file_path,'weights','custom','cp__epoch_50_batch_0.pth', map_location=device)['model_state'])
     model_.eval()
 
     # Create path constants singleton
@@ -120,7 +153,7 @@ if __name__ == "__main__":
 
         # Create dataset object
         # train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=-1, device=device)
-        valid_data = FlirDataset(PathConstants.VAL_DIR, downsample=1, num_images=10, device=device)
+        valid_data = FlirDataset(PathConstants.VAL_DIR, downsample=1, num_images=100, device=device)
 
         # Get reference bounding boxes
         targets = get_targets(valid_data)
@@ -130,6 +163,7 @@ if __name__ == "__main__":
 
         # Save predictions and training targets
         torch.save({'predictions': predictions, 'targets': targets, 'imgs': valid_data}, 'valid_results_custom.pth')
+        imgs = valid_data
 
     else:
         # Load model data
@@ -139,38 +173,41 @@ if __name__ == "__main__":
         targets = model_dict['targets']
         imgs = model_dict['imgs']
 
-        for min_score in range(10):
-            plotted_image_index = 34
-            filtered_predictions = filter_predictions(predictions, min_score=(0.1*min_score))
+    for min_score in range(10):
+        plotted_image_index = 34
+        desired_classes = (3,)
+        # desired_classes = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
+        filtered_predictions = filter_predictions(predictions, min_score=(0.05*min_score), classes=desired_classes)
+        filtered_targets = filter_targets(targets, classes=desired_classes)
 
-            iou = get_iou(filtered_predictions, targets)
+        iou = get_iou(filtered_predictions, filtered_targets)
 
-            map = get_map(filtered_predictions, targets, [0.5, 0.75])
+        map = get_map(filtered_predictions, filtered_targets, [0.25])
 
-            img = model_dict['imgs'][plotted_image_index][0]
-            img_data_all = np.uint8(img.permute(1, 2, 0).numpy())
-            plt.imshow(img_data_all)
-            for i in range((filtered_predictions[plotted_image_index]['boxes'].size()[0])):
-                x_p = int(filtered_predictions[plotted_image_index]['boxes'][i][0])
-                y_p = int(filtered_predictions[plotted_image_index]['boxes'][i][1])
-                w_p = int(filtered_predictions[plotted_image_index]['boxes'][i][2] - x_p)
-                h_p = int(filtered_predictions[plotted_image_index]['boxes'][i][3] - y_p)
-                rect = patches.Rectangle((x_p, y_p), w_p, h_p, color='red', linewidth=3, fill=False)
-                plt.gca().add_patch(rect)
-                plt.text(x_p,y_p,list(ClassConstants.LABELS.keys())[int(filtered_predictions[plotted_image_index]['labels'][i])],color='white',bbox=dict(facecolor='red', edgecolor='red', boxstyle="Square, pad=0")) # backgroundcolor='red',
+        # img = model_dict['imgs'][plotted_image_index][0]
+        # img_data_all = np.uint8(img.permute(1, 2, 0).numpy())
+        # plt.imshow(img_data_all)
+        # for i in range((filtered_predictions[plotted_image_index]['boxes'].size()[0])):
+        #     x_p = int(filtered_predictions[plotted_image_index]['boxes'][i][0])
+        #     y_p = int(filtered_predictions[plotted_image_index]['boxes'][i][1])
+        #     w_p = int(filtered_predictions[plotted_image_index]['boxes'][i][2] - x_p)
+        #     h_p = int(filtered_predictions[plotted_image_index]['boxes'][i][3] - y_p)
+        #     rect = patches.Rectangle((x_p, y_p), w_p, h_p, color='red', linewidth=3, fill=False)
+        #     plt.gca().add_patch(rect)
+        #     plt.text(x_p,y_p,list(ClassConstants.LABELS.keys())[int(filtered_predictions[plotted_image_index]['labels'][i])],color='white',bbox=dict(facecolor='red', edgecolor='red', boxstyle="Square, pad=0")) # backgroundcolor='red',
 
-            for i in range((targets[plotted_image_index]['boxes'].size()[0])):
-                x_p =int(targets[plotted_image_index]['boxes'][i][0])
-                y_p = int(targets[plotted_image_index]['boxes'][i][1])
-                w_p = int(targets[plotted_image_index]['boxes'][i][2] - x_p)
-                h_p = int(targets[plotted_image_index]['boxes'][i][3] - y_p)
-                rect = patches.Rectangle((x_p, y_p), w_p, h_p, color='blue', linewidth=3, fill=False)
-                plt.gca().add_patch(rect)
-                plt.text(x_p,y_p,list(ClassConstants.LABELS.keys())[int(targets[plotted_image_index]['labels'][i])],color='white',bbox=dict(facecolor='blue', edgecolor='blue', boxstyle="Square, pad=0")) # backgroundcolor='red',
-            plt.show()
+        # for i in range((targets[plotted_image_index]['boxes'].size()[0])):
+        #     x_p =int(targets[plotted_image_index]['boxes'][i][0])
+        #     y_p = int(targets[plotted_image_index]['boxes'][i][1])
+        #     w_p = int(targets[plotted_image_index]['boxes'][i][2] - x_p)
+        #     h_p = int(targets[plotted_image_index]['boxes'][i][3] - y_p)
+        #     rect = patches.Rectangle((x_p, y_p), w_p, h_p, color='blue', linewidth=3, fill=False)
+        #     plt.gca().add_patch(rect)
+        #     plt.text(x_p,y_p,list(ClassConstants.LABELS.keys())[int(targets[plotted_image_index]['labels'][i])],color='white',bbox=dict(facecolor='blue', edgecolor='blue', boxstyle="Square, pad=0")) # backgroundcolor='red',
+        # plt.show()
 
 
-            print("IoU and mAP at {}: {}".format(0.1*min_score, iou))
+        print("IoU and mAP at {}: {}".format(0.05*min_score, iou))
 
 
         # print(iou)
