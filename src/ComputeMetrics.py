@@ -140,7 +140,7 @@ if __name__ == "__main__":
         normalize_images = False)
     
     model_.to(device)
-    model_.load_state_dict(torch.load(file_path,'weights','custom','cp__epoch_50_batch_0.pth', map_location=device)['model_state'])
+    model_.load_state_dict(torch.load(os.path.join(file_path,'weights','custom','cp__epoch_50_batch_0.pth'), map_location=device)['model_state'])
     model_.eval()
 
     # Create path constants singleton
