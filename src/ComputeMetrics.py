@@ -114,6 +114,7 @@ def get_map(predictions, targets, iou_thresholds):
     met = metric(predictions, targets)
 
     print(met)
+    return met
 
 if __name__ == "__main__":
     from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
@@ -170,8 +171,8 @@ if __name__ == "__main__":
         predictions = get_model_outputs(model_, valid_data, collate_fn=collate_fn)
 
         # Save predictions and training targets
-        torch.save({'predictions': predictions, 'targets': targets, 'imgs': valid_data}, 'valid_results_custom.pth')
-        imgs = valid_data
+        torch.save({'predictions': predictions, 'targets': targets}, 'valid_results_custom.pth')
+        # imgs = valid_data
 
     else:
         # Load model data
