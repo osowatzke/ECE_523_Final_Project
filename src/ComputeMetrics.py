@@ -157,7 +157,7 @@ if __name__ == "__main__":
     data_dir = data_manager.get_download_dir()
     PathConstants(data_dir)
 
-    if False:
+    if True:
 
         # Create dataset object
         # train_data = FlirDataset(PathConstants.TRAIN_DIR, downsample=1, num_images=-1, device=device)
