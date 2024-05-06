@@ -124,7 +124,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--class_options', default=1, type=int)
     parser.add_argument('-n', '--num_images', default=50, type=int)
-    parser.add_argument('-m', '--map_vals', nargs=3, default=[0.25,0.25,0.25], type=int)
+    parser.add_argument('-m', '--map_vals', nargs=3, default=[0.25,0.25,0.25], type=float)
     args = parser.parse_args()
 
     # Determine the device
