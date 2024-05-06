@@ -182,6 +182,8 @@ if __name__ == "__main__":
         targets = model_dict['targets']
         imgs = model_dict['imgs']
 
+    map_list = []
+    iou_list = []
     for min_score in range(10):
 
         plotted_image_index = 34
@@ -227,8 +229,22 @@ if __name__ == "__main__":
         #     plt.text(x_p,y_p,list(ClassConstants.LABELS.keys())[int(targets[plotted_image_index]['labels'][i])],color='white',bbox=dict(facecolor='blue', edgecolor='blue', boxstyle="Square, pad=0")) # backgroundcolor='red',
         # plt.show()
 
+        map_list.append(map['map_medium'])
+        iou_list.append(iou)
 
         print("IoU and mAP at {}: {}".format(0.05*min_score, iou))
 
+    map = np.array(map_list)
+    iou = np.array(iou_list)
 
-        # print(iou)
+    ax = plt.subplot(1, 2, 1)
+    ax.plot(0.05*np.arange(10), map)
+    ax.set_xlabel('score_threshold')
+    ax.set_ylabel('mAP')
+
+    ax = plt.subplot(1, 2, 2)
+    ax.plot(0.05*np.arange(10), iou)
+    ax.set_xlabel('score_threshold')
+    ax.set_ylabel('IOU')
+
+    plt.show()
