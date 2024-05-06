@@ -40,7 +40,7 @@ model.eval()
 #print(type(train_data[0][0]))
 #test_data = train_data[0][0].reshape((1,) + train_data[0][0].shape)
 #print(test_data.shape)
-img = train_data[1][0]
+img = train_data[0][0]
 pred = model([img])
 img = img[0,:,:].detach().numpy()
 #print(test_data[0,:,:].shape)
@@ -48,8 +48,8 @@ img = img[0,:,:].detach().numpy()
 boxes = pred[0]['boxes'].detach().numpy()
 labels = pred[0]['labels'].detach().numpy()
 scores = pred[0]['scores'].detach().numpy()
-boxes = boxes[scores > 0.25]
-labels = labels[scores > 0.25]
+boxes = boxes[scores > 0.3]
+labels = labels[scores > 0.3]
 boxes = boxes[labels != 0]
 labels = labels[labels != 0]
 #print(boxes)
