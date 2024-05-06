@@ -237,6 +237,8 @@ if __name__ == "__main__":
     map = np.array(map_list)
     iou = np.array(iou_list)
 
+    plt.figure(figsize=(10,6))  
+    
     ax = plt.subplot(1, 2, 1)
     ax.plot(0.05*np.arange(10), map)
     ax.set_xlabel('score_threshold')
